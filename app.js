@@ -3,7 +3,7 @@
  *  버전: student v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const APP_VERSION = 'student v1.2.0 (2026-08-17) 그림+나가기';
+const APP_VERSION = 'student v1.3.0 (2026-08-17) 평가모드';
 console.log('%c' + APP_VERSION, 'background:#1DB954;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -25,7 +25,10 @@ const S = {
   clockOffset: 0,         // 서버 시각 − 내 기기 시각
   lastSentPrint: '',
   serverBusy: false,
-  leaving: false          // [나가기] 를 누른 뒤인지
+  leaving: false,         // [나가기] 를 누른 뒤인지
+  exam: false,            // 평가 모드인지 (수행평가 30분)
+  autoSubmitted: false,   // 시간이 끝나 자동으로 낸 적이 있는지
+  warned5: false, warned1: false
 };
 
 const keyMain = () => 'mj:' + S.sid;
@@ -106,7 +109,9 @@ async function doEnter() {
   S.cls = res.cls || classOf(sid);
   S.email = Auth.email;
   if (res.now) S.clockOffset = new Date(res.now).getTime() - Date.now();
-  if (res.draft) mergeServerDraft(res.draft);
+  S.exam = !!res.exam;
+  /* 평가 모드에서는 서버가 이전 내용을 보내지 않습니다. 혹시 와도 쓰지 않습니다. */
+  if (!S.exam && res.draft) mergeServerDraft(res.draft);
   S.submitted = !!res.submitted;
 
   startApp();
@@ -128,9 +133,22 @@ function mergeServerDraft(draft) {
  * ========================================================================= */
 
 function startApp() {
-  S.data = LS.get(keyMain(), {});
-  S.peer = LS.get(keyPeer(), []);
-  S.seen = LS.get(keySeen(), {});
+  if (S.exam) {
+    /* ── 평가 모드 ────────────────────────────────────────────────
+       수행평가는 모두 같은 백지에서 출발해야 합니다.
+       이 기기에 남아 있던 내용을 지우고, 앞으로도 기기에 남기지 않습니다.
+       ('살펴본 분야' 표시는 답안이 아니므로 그대로 둡니다) */
+    LS.del(keyMain());
+    LS.del(keyPeer());
+    S.data = {};
+    S.peer = [blankPeer()];
+    S.seen = LS.get(keySeen(), {});
+    document.body.classList.add('exam');
+  } else {
+    S.data = LS.get(keyMain(), {});
+    S.peer = LS.get(keyPeer(), []);
+    S.seen = LS.get(keySeen(), {});
+  }
   if (!S.peer.length) S.peer = [blankPeer()];
 
   $('#gate').classList.add('hidden');
@@ -507,6 +525,8 @@ function updateNowBar() {
 let tLocal = null, tServer = null, lastServerAt = 0;
 
 function saveLocalSoon() {
+  /* 평가 모드에서는 태블릿에 아무것도 남기지 않습니다. */
+  if (S.exam) { markSave('평가 중 · 제출해야 남습니다', 'warn'); return; }
   clearTimeout(tLocal);
   tLocal = setTimeout(() => {
     LS.set(keyMain(), S.data);
@@ -517,6 +537,7 @@ function saveLocalSoon() {
 
 /** 서버 임시저장 — 2초 모았다가, 내용이 바뀌었을 때만, 15초에 한 번만 보냅니다. */
 function saveServerSoon() {
+  if (S.exam) return;                 // 평가 모드에서는 서버에도 남기지 않습니다
   clearTimeout(tServer);
   tServer = setTimeout(() => {
     const gap = Date.now() - lastServerAt;
@@ -526,6 +547,10 @@ function saveServerSoon() {
 }
 
 async function saveServerNow(loud) {
+  if (S.exam) {
+    if (loud) toast('평가 중에는 따로 저장하지 않습니다. [지금 제출하기] 를 누르세요.', 'warn', 5000);
+    return { ok: true, skipped: true };
+  }
   const payload = buildPayload();
   const print = fingerprint(JSON.stringify(payload));
   if (print === S.lastSentPrint) {           // 내용이 안 바뀌었으면 보내지 않습니다
@@ -577,6 +602,7 @@ function buildPayload() {
 /* 탭을 닫을 때 한 번 더 */
 function flushOnLeave() {
   if (S.leaving) return;              // [나가기] 로 지운 뒤 다시 쓰지 않도록
+  if (S.exam) return;                 // 평가 모드에서는 남기지 않습니다
   LS.set(keyMain(), S.data);
   LS.set(keyPeer(), S.peer);
   const payload = buildPayload();
@@ -600,9 +626,16 @@ $('#btnSave').addEventListener('click', () => saveServerNow(true));
     새로고침이나 실수로 탭을 닫은 것으로는 지워지지 않습니다.) */
 $('#btnLogout').addEventListener('click', async () => {
   const n = countFilled(S.data);
-  const warn = S.submitted
-    ? '나가시겠습니까?\n\n이 기기에 남아 있는 내용은 지워집니다.'
-    : `아직 제출하지 않았습니다.\n\n지금 나가면 이 기기에 남아 있는 내용이 지워집니다.\n(작성 ${n}개 · 서버에 저장된 것은 남습니다)\n\n나가시겠습니까?`;
+  let warn;
+  if (S.exam && !S.submitted) {
+    warn = `⚠ 수행평가 중이고 아직 제출하지 않았습니다.\n\n` +
+           `지금 나가면 지금까지 쓴 ${n}개가 모두 사라집니다.\n` +
+           `평가 중에는 어디에도 저장되지 않습니다.\n\n정말 나가시겠습니까?`;
+  } else if (S.submitted) {
+    warn = '나가시겠습니까?\n\n이 기기에 남아 있는 내용은 지워집니다.';
+  } else {
+    warn = `아직 제출하지 않았습니다.\n\n지금 나가면 이 기기에 남아 있는 내용이 지워집니다.\n(작성 ${n}개 · 서버에 저장된 것은 남습니다)\n\n나가시겠습니까?`;
+  }
   if (!confirm(warn)) return;
 
   const btn = $('#btnLogout');
@@ -650,6 +683,27 @@ $('#btnSubmit').addEventListener('click', async () => {
   }
 });
 
+/** 평가 시간이 끝날 때 자동으로 냅니다.
+    학생이 [지금 제출하기] 를 누르지 못한 채 시간이 지나 버리는 일을 막습니다. */
+async function autoSubmit() {
+  if (S.submitted) return;
+  if (!S.data.q1 && countFilled(S.data) === 0) return;   // 아무것도 안 썼으면 내지 않습니다
+
+  toast('시간이 다 되어 자동으로 제출합니다…', 'warn', 6000);
+  const res = await apiPost('submit', {
+    idToken: Auth.idToken, sid: S.sid, data: buildPayload(),
+    peer: S.peer.filter(p => p.sid)
+  });
+  if (res && res.ok) {
+    S.submitted = true;
+    toast('자동으로 제출했습니다', 'ok', 6000);
+    applyLock();
+  } else {
+    toast('자동 제출에 실패했습니다. [지금 제출하기] 를 눌러 주세요.', 'bad', 9000);
+    S.autoSubmitted = false;      // 학생이 직접 낼 수 있게 다시 열어 둡니다
+  }
+}
+
 /** 수업이 끝났거나, 제출이 닫혔거나, 이미 냈으면 입력을 잠급니다. */
 function applyLock() {
   const entryShut = !!(S.cfg && S.cfg.entry && !S.cfg.entry.open);   // 수업 시간 밖
@@ -668,7 +722,8 @@ function applyLock() {
     .forEach(el => { if (el.tagName === 'BUTTON' || el.tagName === 'SELECT') el.disabled = entryShut;
                      else el.readOnly = entryShut; });
 
-  $('#btnSave').disabled = entryShut;
+  $('#btnSave').disabled = entryShut || S.exam;
+  $('#btnSave').textContent = S.exam ? '평가 중 (저장 없음)' : '저장하기';
   $('#btnPeerAdd').disabled = entryShut;
   $('#btnPeerSave').disabled = entryShut;
   $('#btnSubmit').disabled = entryShut || submitShut || submittedLock;
@@ -692,6 +747,12 @@ async function pollConfig() {
 
     S.cfg = r;
     if (r.now) S.clockOffset = new Date(r.now).getTime() - Date.now();
+    if (typeof r.exam === 'boolean') {
+      if (r.exam !== S.exam) {
+        S.exam = r.exam;
+        document.body.classList.toggle('exam', S.exam);
+      }
+    }
     applyLock();
     tickStatus();
 
@@ -712,6 +773,41 @@ function tickStatus() {
   const c = S.cfg;
   const now = serverNow();
   let cls = 'closed', txt = '';
+
+  /* ── 평가 모드 ────────────────────────────────────────────────
+     남은 시간을 크게 보여 주고, 끝나기 직전에 자동으로 제출합니다. */
+  if (S.exam && c.entry && c.entry.open && c.entry.to) {
+    const left = new Date(c.entry.to).getTime() - now;
+
+    if (!S.submitted) {
+      if (!S.warned5 && left <= 5 * 60000 && left > 60000) {
+        S.warned5 = true;
+        toast('5분 남았습니다. 마무리해 주세요.', 'warn', 6000);
+      }
+      if (!S.warned1 && left <= 60000 && left > 12000) {
+        S.warned1 = true;
+        toast('1분 남았습니다. 곧 자동으로 제출됩니다.', 'bad', 8000);
+      }
+      /* 마감 12초 전에 한 번 자동으로 냅니다. (서버 마감에 걸리지 않도록) */
+      if (!S.autoSubmitted && left <= 12000) {
+        S.autoSubmitted = true;
+        autoSubmit();
+      }
+    }
+
+    el.className = 'statusbar exam' + (left < 5 * 60000 ? ' wait' : '');
+    el.textContent = (S.submitted ? '제출 완료 · ' : '') +
+      `수행평가 중 · 남은 시간 ${fmtLeft(left)}` +
+      (S.submitted ? '' : ' · 제출해야 남습니다');
+    return;
+  }
+  if (S.exam && c.entry && !c.entry.open) {
+    el.className = 'statusbar closed';
+    el.textContent = S.submitted
+      ? '수행평가가 끝났습니다 · 제출 완료'
+      : '수행평가 시간이 끝났습니다';
+    return;
+  }
 
   /* 수업 시간이 아니면 그것부터 알립니다. 제출 여부는 그다음 문제입니다. */
   if (c.entry && !c.entry.open) {

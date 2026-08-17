@@ -3,7 +3,7 @@
  *  버전: teacher v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const TEACHER_VERSION = 'teacher v1.3.0 (2026-08-17) 학생화면+그림';
+const TEACHER_VERSION = 'teacher v1.4.0 (2026-08-17) 평가모드';
 console.log('%c' + TEACHER_VERSION, 'background:#F5A524;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -115,6 +115,8 @@ function boot() {
 const LESSON_MINUTES = 50;
 /** [제출 열기] 를 누르면 열리는 시간(분). */
 const SUBMIT_MINUTES = 25;
+/** [평가 시작] 을 누르면 열리는 수행평가 시간(분). */
+const EXAM_MINUTES = 30;
 
 async function loadConfig(quiet) {
   const res = await apiPost('teacherConfig', { idToken: Auth.idToken });
@@ -127,7 +129,8 @@ async function loadConfig(quiet) {
 
 function cfgOf(cls) {
   return T.cfg[cls] || { entry: '', entryFrom: '', entryTo: '',
-                         submit: '', resubmit: '', submitFrom: '', submitTo: '', notice: '' };
+                         submit: '', resubmit: '', submitFrom: '', submitTo: '',
+                         notice: '', exam: '' };
 }
 
 /** 시각을 시트에 적는 형식으로 */
@@ -142,8 +145,12 @@ function renderQuick() {
     const e = st ? st.entry : null;
     const s = st ? st.submit : null;
 
+    const isExam = !!(st && st.exam);
+
     let badge = '<span class="badge none">닫힘</span>';
-    if (e && e.open) {
+    if (isExam && e && e.open) {
+      badge = '<span class="badge exam">수행평가 중</span>';
+    } else if (e && e.open) {
       badge = '<span class="badge done">수업 중</span>';
       if (s && s.open) badge += ' <span class="badge draft">제출 열림</span>';
     } else if (e && e.reason === 'ENTRY_BEFORE') {
@@ -167,6 +174,9 @@ function renderQuick() {
         <button class="btn sm ghost" data-a="subShut">제출 닫기</button></td>
       <td class="num">
         <button class="btn sm" data-a="both">수업+제출 함께 열기</button></td>
+      <td class="num">
+        <button class="btn sm ${isExam ? 'danger' : ''}" data-a="exam">평가 시작</button>
+        <button class="btn sm ghost" data-a="examEnd">평가 종료</button></td>
     </tr>`;
   }).join('');
 
@@ -195,6 +205,29 @@ async function quick(cls, what) {
     }
     patch = { submit: 'Y', submitFrom: whenText(new Date()), submitTo: whenText(plusMin(SUBMIT_MINUTES)) };
     msg = `${cls} 제출을 열었습니다 · ${SUBMIT_MINUTES}분`;
+
+  } else if (what === 'exam') {
+    /* ── 수행평가 시작 ────────────────────────────────────────────
+       입장·제출을 같은 시각에 함께 열고, 평가모드를 켭니다.
+       평가모드에서는 학생 화면이 백지로 시작하고
+       태블릿·서버 어디에도 임시저장이 남지 않습니다. */
+    if (!confirm(
+      `${cls} 수행평가를 시작합니다.\n\n` +
+      `· ${EXAM_MINUTES}분 동안 열립니다\n` +
+      `· 학생 화면은 백지에서 시작합니다 (이전에 쓴 내용 안 불러옴)\n` +
+      `· 태블릿에도 서버에도 임시저장이 남지 않습니다\n` +
+      `· 시간이 끝나면 자동으로 제출됩니다\n\n시작할까요?`)) return;
+    patch = { exam: 'Y',
+              entry: 'Y', entryFrom: whenText(new Date()), entryTo: whenText(plusMin(EXAM_MINUTES)),
+              submit: 'Y', submitFrom: whenText(new Date()), submitTo: whenText(plusMin(EXAM_MINUTES)),
+              resubmit: 'N' };
+    msg = `${cls} 수행평가를 시작했습니다 · ${EXAM_MINUTES}분`;
+
+  } else if (what === 'examEnd') {
+    patch = { exam: 'N',
+              entry: 'N', entryFrom: '', entryTo: '',
+              submit: 'N', submitFrom: '', submitTo: '' };
+    msg = `${cls} 수행평가를 종료했습니다`;
 
   } else if (what === 'subShut') {
     patch = { submit: 'N', submitFrom: '', submitTo: '' };

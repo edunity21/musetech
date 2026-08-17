@@ -706,3 +706,24 @@ body.teacher .toast { bottom: 20px; }
 
 /* 인쇄할 때는 단추를 숨깁니다. */
 @media print { #btnLogout, #btnTLogout, .subtabs { display: none !important; } }
+
+/* ---------------------------------------------------------------------------
+ *  17. 수행평가 모드 표시 (2026-08-17 추가)
+ * -------------------------------------------------------------------------*/
+
+/* 학생 화면 — 평가 중에는 상단 띠를 붉게 하고 테두리로 알려 줍니다. */
+.statusbar.exam {
+  background: #7A1220; color: #FFD9DE; font-weight: 700; letter-spacing: .01em;
+}
+.statusbar.exam.wait { background: #A3122A; color: #fff; }
+body.exam .topbar { box-shadow: inset 0 -3px 0 #A3122A; }
+body.exam .nowbar { border-top-color: #A3122A; }
+
+/* 교사 화면 — 평가 중인 학급 뱃지 */
+.badge.exam { background: #A3122A; color: #fff; }
+
+/* 교사 화면 — 눈에 띄는 안내 상자 */
+.notice.warn {
+  border-color: rgba(245, 165, 36, .5);
+  background: rgba(245, 165, 36, .08);
+}
