@@ -5,7 +5,7 @@
 
 /* ★ 1. Apps Script 웹앱 주소.
       Code.gs 를 배포한 뒤 받은 /exec 주소를 그대로 붙여 넣으세요. */
-const SERVER_URL = 'https://script.google.com/macros/s/AKfycbzYvIjBX45ZEfV5q-MBWvk8xuoPUGZKLLWMu28uzv6juRr-22oqGy8v6Nbc5fxJAhcb/exec';
+const SERVER_URL = 'https://script.google.com/macros/s/AKfycbzYvljBX45ZEfV5q-MBWvk8xuoPUGZKLLWMu28uzv6juRr-22oqGy8v6Nbc5fxJAhcb/exec';
 
 /* ★ 2. 구글 클라이언트 ID.
       Google Cloud Console → 사용자 인증 정보 → OAuth 클라이언트 ID(웹) */
