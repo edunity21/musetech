@@ -193,8 +193,18 @@ const Auth = {
         text: 'signin_with', locale: 'ko', width: 280
       });
     };
-    if (window.google && google.accounts) start();
-    else window.addEventListener('gsi-ready', start, { once: true });
+    /* 구글 스크립트가 준비될 때까지 0.2초 간격으로 최대 10초 기다립니다.
+       이벤트만 기다리면 놓치는 경우가 있어 직접 확인합니다. */
+    let tries = 0;
+    const wait = setInterval(() => {
+      if (window.google && google.accounts && google.accounts.id) {
+        clearInterval(wait);
+        start();
+      } else if (++tries > 50) {
+        clearInterval(wait);
+        start();   // 10초 뒤에도 없으면 안내 문구를 띄웁니다
+      }
+    }, 200);
   },
 
   _handle(resp) {
