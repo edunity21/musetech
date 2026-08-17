@@ -3,72 +3,12 @@
  *  버전: student v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const APP_VERSION = 'student v1.1.0 (2026-08-17) 입장통제';
+const APP_VERSION = 'student v1.2.0 (2026-08-17) 그림+나가기';
 console.log('%c' + APP_VERSION, 'background:#1DB954;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
-/* ---------------------------------------------------------------------------
- *  0. 앨범 표지 색 (분야마다 다르게. 화면 포인트 색은 초록 하나 그대로입니다)
- * -------------------------------------------------------------------------*/
-const ART = [
-  ['#1DB954', '#0E6B32'], ['#E8734A', '#8A3418'], ['#5B7CFA', '#26307A'],
-  ['#F2C14E', '#8A6416'], ['#48C9B0', '#166352'], ['#B96BD8', '#5B2478'],
-  ['#4FA8E8', '#144E7A'], ['#D2795E', '#78331F'], ['#8BC34A', '#3F6318'],
-  ['#F06292', '#8A2247'], ['#A0A8B4', '#4A5058'], ['#00C2C7', '#00595C']
-];
-const artStyle = i => `background:linear-gradient(150deg,${ART[i % 12][0]},${ART[i % 12][1]})`;
-
-/* ---------------------------------------------------------------------------
- *  1. 활동지 문항 (부록 2 문구 그대로)
- * -------------------------------------------------------------------------*/
-const QUESTIONS = [
-  { id: 'q1', no: 1, type: 'pick', badge: '',
-    title: '어떤 분야를 골랐나요?',
-    sub: '열두 개 분야 가운데 하나를 고르세요.',
-    help: '고르기 어려우면 [산업 둘러보기] 탭을 다시 보고 오세요.', min: 1 },
-
-  { id: 'q2', no: 2, type: 'line', badge: '',
-    title: '그 분야를 고른 이유는 무엇인가요?',
-    sub: '한 문장이면 충분합니다.',
-    help: '"평소에 게임을 많이 해서" 처럼 솔직하게 적으면 됩니다.', min: 5 },
-
-  { id: 'q3', no: 3, type: 'area', badge: '산업 조사', rows: 4,
-    title: '이 산업은 무엇을 하는 곳인가요?',
-    sub: '무엇을 만들고, 누구에게 전하는지 적어 보세요.',
-    help: '두세 문장. 조사한 내용을 자기 말로 바꾸어 적으세요.', min: 40 },
-
-  { id: 'q4', no: 4, type: 'area', badge: '산업 조사', rows: 4,
-    title: '이 산업에는 어떤 직업이 있나요?',
-    sub: '두 가지 이상 적고, 각각 무슨 일을 하는지 함께 적으세요.',
-    help: '"직업 이름 — 하는 일" 형태로 적으면 정리하기 쉽습니다.', min: 30 },
-
-  { id: 'q5', no: 5, type: 'area', badge: '산업 조사', rows: 3,
-    title: '조사한 곳을 적어 주세요.',
-    sub: '서로 다른 곳 두 군데 이상을 적으세요.',
-    help: '누리집 이름, 기사 제목, 영상 제목 등. 주소 전체가 아니어도 됩니다.', min: 15 },
-
-  { id: 'q6', no: 6, type: 'area', badge: '활용 가치', rows: 4,
-    title: '이 산업에서 음악은 어떤 장면에 쓰이나요?',
-    sub: '구체적인 장면을 떠올려 적어 보세요.',
-    help: '"게임에서 보스가 나타날 때 음악이 빨라진다" 처럼요.', min: 30 },
-
-  { id: 'q7', no: 7, type: 'area', badge: '활용 가치', key: true, rows: 5,
-    title: '이 산업에 음악이 없다면 무엇이 사라질까요?',
-    sub: '음악이 그 산업에서 어떤 값어치를 하고 있는지 생각해 보는 문항입니다.',
-    help: '음악을 모두 지웠다고 상상해 보세요. 무엇이 밋밋해지고, 누가 곤란해질까요?', min: 40 },
-
-  { id: 'q8', no: 8, type: 'area', badge: '활용 가치', rows: 3,
-    title: '이 분야와 나를 이어 주는 점이 있다면?',
-    sub: '내 관심사나 앞으로의 진로와 닿는 부분을 적어 보세요.',
-    help: '억지로 연결하지 않아도 됩니다. 없으면 "아직 잘 모르겠다"도 답이 됩니다.', min: 15 },
-
-  { id: 'q9', no: 9, type: 'three', badge: '발표 수행',
-    title: '발표용 핵심 세 문장',
-    sub: '1분 동안 말할 내용을 세 문장으로 간추리세요.',
-    help: '① 무슨 분야인가 ② 음악이 어떻게 쓰이는가 ③ 왜 중요한가', min: 3 }
-];
-
-const Q9_LABEL = ['① 무슨 분야인가', '② 음악이 어떻게 쓰이는가', '③ 왜 중요한가'];
+/* 표지 색 · 분야 그림 · 활동지 문항은 shared.js 에 있습니다.
+   (교사 화면도 같은 내용을 쓰기 때문에 한 곳에 모아 두었습니다) */
 
 /* ---------------------------------------------------------------------------
  *  2. 지금 상태
@@ -84,7 +24,8 @@ const S = {
   cfg: null,              // 서버가 알려 준 제출 상태
   clockOffset: 0,         // 서버 시각 − 내 기기 시각
   lastSentPrint: '',
-  serverBusy: false
+  serverBusy: false,
+  leaving: false          // [나가기] 를 누른 뒤인지
 };
 
 const keyMain = () => 'mj:' + S.sid;
@@ -277,6 +218,7 @@ function renderAlbums() {
     <button class="album ${S.data.q1 === ind.n ? 'picked' : ''}" data-n="${ind.n}">
       <div class="art" style="${artStyle(i)}">
         <span class="num">${ind.n}</span>
+        ${artSvg(ind.n)}
         <span class="en">${esc(ind.en)}</span>
         <span class="play" aria-hidden="true">▶</span>
       </div>
@@ -331,6 +273,7 @@ function openDetail(n) {
   $('#detail').innerHTML = `
     <div class="banner" style="${artStyle(i)}">
       <button class="back" id="btnBack" aria-label="닫기">✕</button>
+      <div class="banner-art">${artSvg(d.n)}</div>
       <div class="kicker">분야 ${d.n} · ${esc(d.en)}</div>
       <h2>${esc(d.name)}</h2>
       <p class="one">${esc(d.one)}</p>
@@ -556,7 +499,7 @@ function updateNowBar() {
   const ind = INDUSTRIES.find(x => x.n === S.data.q1);
   const i = ind ? INDUSTRIES.indexOf(ind) : -1;
   $('#nowName').textContent = ind ? ind.name : '아직 고르지 않았습니다';
-  $('#nowThumb').textContent = ind ? ind.n : '–';
+  $('#nowThumb').innerHTML = ind ? artSvg(ind.n) : '–';
   $('#nowThumb').setAttribute('style', ind ? artStyle(i) : '');
 }
 
@@ -633,6 +576,7 @@ function buildPayload() {
 
 /* 탭을 닫을 때 한 번 더 */
 function flushOnLeave() {
+  if (S.leaving) return;              // [나가기] 로 지운 뒤 다시 쓰지 않도록
   LS.set(keyMain(), S.data);
   LS.set(keyPeer(), S.peer);
   const payload = buildPayload();
@@ -642,11 +586,43 @@ function flushOnLeave() {
 window.addEventListener('pagehide', flushOnLeave);
 document.addEventListener('visibilitychange', () => { if (document.hidden) flushOnLeave(); });
 window.addEventListener('beforeunload', (e) => {
+  if (S.leaving) return;              // [나가기] 로 나가는 중이면 묻지 않습니다
   flushOnLeave();
   if (!S.submitted && countFilled(S.data) > 0) { e.preventDefault(); e.returnValue = ''; }
 });
 
 $('#btnSave').addEventListener('click', () => saveServerNow(true));
+
+/* ---------- 나가기 ----------
+   태블릿을 여러 명이 쓰거나, 다음 시간에 다른 상태로 시작해야 할 때 씁니다.
+   이 단추를 누르면 이 기기에 남아 있던 내 작성 내용이 지워집니다.
+   (서버에 저장된 것은 그대로 있어서 다시 로그인하면 이어서 쓸 수 있습니다.
+    새로고침이나 실수로 탭을 닫은 것으로는 지워지지 않습니다.) */
+$('#btnLogout').addEventListener('click', async () => {
+  const n = countFilled(S.data);
+  const warn = S.submitted
+    ? '나가시겠습니까?\n\n이 기기에 남아 있는 내용은 지워집니다.'
+    : `아직 제출하지 않았습니다.\n\n지금 나가면 이 기기에 남아 있는 내용이 지워집니다.\n(작성 ${n}개 · 서버에 저장된 것은 남습니다)\n\n나가시겠습니까?`;
+  if (!confirm(warn)) return;
+
+  const btn = $('#btnLogout');
+  btn.disabled = true; btn.textContent = '정리 중…';
+
+  /* 나가기 전에 마지막으로 한 번 서버에 보냅니다. (수업 시간이면 저장됩니다) */
+  try { await saveServerNow(false); } catch (e) {}
+
+  /* 이 기기에 남은 흔적을 지웁니다. */
+  LS.del(keyMain());
+  LS.del(keyPeer());
+  LS.del(keySeen());
+
+  /* 나가는 중에 '저장 안 됐다'는 경고창이 뜨지 않도록 표시해 둡니다. */
+  S.leaving = true;
+  S.data = {}; S.peer = []; S.seen = {};
+
+  Auth.signOut();
+  location.reload();
+});
 
 /* ---------- 제출 ---------- */
 $('#btnSubmit').addEventListener('click', async () => {

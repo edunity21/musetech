@@ -64,13 +64,14 @@
           <div class="t2" id="serverLine">서버 확인 중…</div>
         </div>
         <div class="who" id="whoBox"></div>
+        <button class="btn sm ghost" id="btnTLogout">로그아웃</button>
       </div>
 
       <nav class="tabs" role="tablist" aria-label="화면 이동">
         <button class="tab" role="tab" data-tab="control" aria-selected="true">수업 통제</button>
         <button class="tab" role="tab" data-tab="status"  aria-selected="false">제출 현황</button>
         <button class="tab" role="tab" data-tab="roster"  aria-selected="false">명렬표</button>
-        <button class="tab" role="tab" data-tab="learn"   aria-selected="false">학습 자료</button>
+        <button class="tab" role="tab" data-tab="learn"   aria-selected="false">학생 화면</button>
         <button class="tab" role="tab" data-tab="log"     aria-selected="false">기록</button>
       </nav>
     </div>
@@ -211,24 +212,82 @@
       </div>
     </section>
 
-    <!-- ---------- 탭 4 · 학습 자료 (학생 화면과 같은 내용) ---------- -->
+    <!-- ---------- 탭 4 · 학생 화면 (학생이 보는 것과 같은 내용) ---------- -->
     <section class="panel" id="panel-learn" role="tabpanel" hidden>
       <div class="notice">
-        학생이 보는 <b>산업 둘러보기</b>와 같은 자료입니다. 수업 중 화면에 띄워 함께 보세요.
-        카드를 누르면 자세한 내용이 나옵니다.
+        학생 태블릿에 뜨는 화면입니다. 수업 중 교실 화면에 띄워 함께 보세요.
+        <b>여기서는 글을 쓸 수 없습니다.</b> 보기 전용입니다.
       </div>
 
-      <div class="searchrow">
-        <input class="search" id="tSearchBox" type="search" autocomplete="off"
-               placeholder="분야 · 직업 · 낱말로 찾기 (예: 게임, 조율, 저작권)">
+      <!-- 안쪽 탭 -->
+      <nav class="subtabs" role="tablist" aria-label="학생 화면 이동">
+        <button class="subtab" role="tab" data-sub="browse"  aria-selected="true">산업 둘러보기</button>
+        <button class="subtab" role="tab" data-sub="sheet"   aria-selected="false">활동지</button>
+        <button class="subtab" role="tab" data-sub="present" aria-selected="false">발표 준비</button>
+        <button class="subtab" role="tab" data-sub="peer"    aria-selected="false">동료 평가</button>
+      </nav>
+
+      <!-- 안쪽 1 · 산업 둘러보기 -->
+      <div class="subpanel" id="sub-browse">
+        <div class="searchrow">
+          <input class="search" id="tSearchBox" type="search" autocomplete="off"
+                 placeholder="분야 · 직업 · 낱말로 찾기 (예: 게임, 조율, 저작권)">
+        </div>
+        <div id="tBrowseCount" class="dim" style="margin:4px 0 10px"></div>
+        <div class="grid" id="tAlbumGrid"></div>
+
+        <h2 style="margin:26px 0 4px">직업으로 찾기</h2>
+        <p class="dim" style="margin-bottom:12px">열두 분야 안에 있는 직업을 한자리에 모았습니다.</p>
+        <div id="tJobList" class="tracks"></div>
       </div>
 
-      <div id="tBrowseCount" class="dim" style="margin:4px 0 10px"></div>
-      <div class="grid" id="tAlbumGrid"></div>
+      <!-- 안쪽 2 · 활동지 -->
+      <div class="subpanel" id="sub-sheet" hidden>
+        <div class="notice">
+          <b>채점 기준</b> — 산업 조사 8점 · 음악의 활용 가치 8점 · 발표 4점.
+          <b>7번 문항</b>이 상과 중을 가릅니다.
+        </div>
+        <div id="tQList"></div>
+      </div>
 
-      <h2 style="margin:26px 0 4px">직업으로 찾기</h2>
-      <p class="dim" style="margin-bottom:12px">열두 분야 안에 있는 직업을 한자리에 모았습니다.</p>
-      <div id="tJobList" class="tracks"></div>
+      <!-- 안쪽 3 · 발표 준비 -->
+      <div class="subpanel" id="sub-present" hidden>
+        <div class="card">
+          <h2>모둠과 발표 순서</h2>
+          <p class="muted">학생은 여기에 모둠 번호와 발표 순서를 적습니다.</p>
+        </div>
+        <div class="card">
+          <h2>1분 발표 연습</h2>
+          <p class="muted">학생 화면에는 1분 타이머가 있습니다.
+            활동지 9번에 적은 세 문장이 여기에 그대로 나타납니다.</p>
+          <div class="timer">
+            <div class="clock" id="tClock">01:00</div>
+            <button class="btn primary" id="tBtnTimer">시작</button>
+            <button class="btn ghost" id="tBtnTimerReset">되돌리기</button>
+          </div>
+          <p class="dim" style="margin-top:10px">
+            교실 화면에 띄워 모둠 발표 시간을 재는 데 쓰셔도 됩니다.</p>
+        </div>
+        <div class="card">
+          <h2>발표할 때 이렇게</h2>
+          <ul class="think">
+            <li>모둠원을 보고 말합니다. 화면만 읽지 않습니다.</li>
+            <li>① 무슨 분야인가 → ② 음악이 어떻게 쓰이는가 → ③ 왜 중요한가, 순서로 말합니다.</li>
+            <li>발표가 끝나면 질문을 하나 받습니다. 원고에 없는 말이어도 괜찮습니다.</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 안쪽 4 · 동료 평가 -->
+      <div class="subpanel" id="sub-peer" hidden>
+        <div class="notice">
+          학생은 모둠원의 발표를 듣고 한 사람씩 적습니다. <b>점수를 매기지 않습니다.</b>
+          성적에 반영되지 않고, 발표자에게도 보이지 않습니다.
+        </div>
+        <div id="tPeerView"></div>
+        <p class="dim" style="margin-top:12px">
+          학생이 낸 동료 평가는 스프레드시트 <b>동료평가</b> 시트에 쌓입니다.</p>
+      </div>
     </section>
 
     <!-- ---------- 탭 5 · 기록 ---------- -->
@@ -264,6 +323,7 @@
 
 <script src="config.js"></script>
 <script src="industries.js"></script>
+<script src="shared.js"></script>
 <script src="common.js"></script>
 <script src="teacher.js"></script>
 <script src="https://accounts.google.com/gsi/client?onload=onGsiLoad" async defer></script>

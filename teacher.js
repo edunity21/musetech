@@ -3,7 +3,7 @@
  *  버전: teacher v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const TEACHER_VERSION = 'teacher v1.2.0 (2026-08-17) 비번+학습자료';
+const TEACHER_VERSION = 'teacher v1.3.0 (2026-08-17) 학생화면+그림';
 console.log('%c' + TEACHER_VERSION, 'background:#F5A524;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -538,14 +538,7 @@ $('#btnLogLoad').addEventListener('click', async () => {
  *     학생 화면과 달리 '분야 정하기' 단추는 없습니다. (교사는 고를 일이 없으므로)
  * ========================================================================= */
 
-/** 앨범 표지 색. app.js 와 같은 값입니다. */
-const T_ART = [
-  ['#1DB954', '#0E6B32'], ['#E8734A', '#8A3418'], ['#5B7CFA', '#26307A'],
-  ['#F2C14E', '#8A6416'], ['#48C9B0', '#166352'], ['#B96BD8', '#5B2478'],
-  ['#4FA8E8', '#144E7A'], ['#D2795E', '#78331F'], ['#8BC34A', '#3F6318'],
-  ['#F06292', '#8A2247'], ['#A0A8B4', '#4A5058'], ['#00C2C7', '#00595C']
-];
-const tArtStyle = i => `background:linear-gradient(150deg,${T_ART[i % 12][0]},${T_ART[i % 12][1]})`;
+/* 표지 색·그림·활동지 문항은 shared.js 에 있습니다. */
 
 let tSearch = '';
 let tLearnReady = false;
@@ -556,11 +549,118 @@ function renderLearn() {
       tSearch = e.target.value.trim().toLowerCase();
       tRenderAlbums(); tRenderJobs();
     });
+
+    /* 안쪽 탭 이동 */
+    $$('.subtab').forEach(b => b.addEventListener('click', () => {
+      $$('.subtab').forEach(x => x.setAttribute('aria-selected', String(x === b)));
+      ['browse', 'sheet', 'present', 'peer'].forEach(n =>
+        $('#sub-' + n).hidden = (n !== b.dataset.sub));
+    }));
+
+    tBuildSheet();
+    tBuildPeer();
+    tSetupTimer();
     tLearnReady = true;
   }
   tRenderAlbums();
   tRenderJobs();
 }
+
+/* ---------- 활동지 (보기 전용) ----------
+   학생이 보는 아홉 문항을 그대로 보여 줍니다. 글은 쓸 수 없습니다. */
+function tBuildSheet() {
+  $('#tQList').innerHTML = QUESTIONS.map(q => {
+    const badge = q.badge
+      ? `<span class="q-badge ${q.key ? 'key' : ''}">${esc(q.badge)}${q.key ? ' · 상·중을 가름' : ''}</span>`
+      : '';
+    let body = '';
+
+    if (q.type === 'pick') {
+      body = `<div class="grid">${INDUSTRIES.map((ind, i) => `
+        <div class="album">
+          <div class="art" style="${artStyle(i)}">
+            <span class="num">${ind.n}</span>
+            ${artSvg(ind.n)}
+          </div>
+          <div class="nm">${esc(ind.name)}</div>
+        </div>`).join('')}</div>`;
+    } else if (q.type === 'line') {
+      body = `<input class="t-input" type="text" disabled placeholder="학생이 한 문장으로 적습니다">`;
+    } else if (q.type === 'three') {
+      body = Q9_LABEL.map(lab => `
+        <label class="field"><span>${esc(lab)}</span>
+          <input class="t-input" type="text" disabled placeholder="학생이 한 문장으로 적습니다"></label>`).join('');
+    } else {
+      body = `<textarea class="t-input" rows="${q.rows || 3}" disabled
+        placeholder="학생이 여기에 적습니다 (${q.min}자 이상 권장)"></textarea>`;
+    }
+
+    return `
+      <div class="q">
+        <div class="q-head">
+          <span class="q-no">${q.no}</span>
+          <div>
+            <div class="q-title">${esc(q.title)} ${badge}</div>
+            <div class="q-sub">${esc(q.sub)}</div>
+          </div>
+        </div>
+        ${body}
+        <p class="q-help">${esc(q.help)}</p>
+      </div>`;
+  }).join('');
+}
+
+/* ---------- 동료 평가 (보기 전용) ---------- */
+function tBuildPeer() {
+  $('#tPeerView').innerHTML = `
+    <div class="q">
+      <div class="row-wrap">
+        <label class="field"><span>발표자 학번</span>
+          <input class="t-input" type="text" disabled placeholder="예) 3405"></label>
+        <label class="field"><span>발표한 분야</span>
+          <select class="t-select" disabled><option>고르기</option></select></label>
+      </div>
+      <label class="field" style="margin-top:12px"><span>얼마나 이해되었나요</span>
+        <select class="t-select" disabled><option>잘 이해됨 / 보통 / 어려웠음</option></select></label>
+      <label class="field" style="margin-top:12px"><span>인상 깊었던 점</span>
+        <textarea class="t-input" rows="2" disabled placeholder="학생이 적습니다"></textarea></label>
+      <label class="field" style="margin-top:12px"><span>더 궁금한 점</span>
+        <textarea class="t-input" rows="2" disabled placeholder="학생이 적습니다"></textarea></label>
+    </div>`;
+}
+
+/* ---------- 1분 타이머 (교실 화면용으로 실제로 돕니다) ---------- */
+function tSetupTimer() {
+  let left = 60, id = null;
+  const show = () => { $('#tClock').textContent = fmtLeft(left * 1000); };
+  show();
+  $('#tBtnTimer').addEventListener('click', () => {
+    if (id) {
+      clearInterval(id); id = null; $('#tBtnTimer').textContent = '시작';
+      return;
+    }
+    $('#tBtnTimer').textContent = '멈춤';
+    id = setInterval(() => {
+      left--; show();
+      if (left <= 0) {
+        clearInterval(id); id = null;
+        $('#tBtnTimer').textContent = '시작';
+        toast('1분이 지났습니다', 'warn');
+      }
+    }, 1000);
+  });
+  $('#tBtnTimerReset').addEventListener('click', () => {
+    clearInterval(id); id = null; left = 60; show();
+    $('#tBtnTimer').textContent = '시작';
+  });
+}
+
+/* ---------- 로그아웃 ---------- */
+$('#btnTLogout').addEventListener('click', () => {
+  if (!confirm('로그아웃하시겠습니까?\n\n다시 들어오려면 구글 로그인과 비밀번호가 필요합니다.')) return;
+  Auth.signOut();
+  location.reload();
+});
 
 function tMatch(ind) {
   if (!tSearch) return true;
@@ -579,8 +679,9 @@ function tRenderAlbums() {
     const i = INDUSTRIES.indexOf(ind);
     return `
     <button class="album" data-n="${ind.n}">
-      <div class="art" style="${tArtStyle(i)}">
+      <div class="art" style="${artStyle(i)}">
         <span class="num">${ind.n}</span>
+        ${artSvg(ind.n)}
         <span class="en">${esc(ind.en)}</span>
         <span class="play" aria-hidden="true">▶</span>
       </div>
@@ -628,8 +729,9 @@ function tOpenDetail(n) {
   const majors = (typeof MAJORS !== 'undefined' && MAJORS[n]) ? MAJORS[n] : null;
 
   $('#tDetail').innerHTML = `
-    <div class="banner" style="${tArtStyle(i)}">
+    <div class="banner" style="${artStyle(i)}">
       <button class="back" id="tBtnBack" aria-label="닫기">✕</button>
+      <div class="banner-art">${artSvg(d.n)}</div>
       <div class="kicker">분야 ${d.n} · ${esc(d.en)}</div>
       <h2>${esc(d.name)}</h2>
       <p class="one">${esc(d.one)}</p>

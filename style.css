@@ -1,6 +1,6 @@
 /* ============================================================================
  *  style.css — 음악 산업 탐구 (생활화 영역)
- *  버전: style v1.0.0 (2026-08-17)
+ *  버전: style v1.1.0 (2026-08-17)
  *  · 학생 화면과 교사 화면이 함께 씁니다.
  *  · 교사 화면은 <body class="teacher"> 로 색만 바뀝니다.
  * ==========================================================================*/
@@ -639,3 +639,70 @@ body.teacher .toast { bottom: 20px; }
 .print-only { display: none; }
 #printHeader { display: none; }
 @media print { #printHeader { display: block !important; margin-bottom: 10pt; } }
+
+/* ===========================================================================
+ *  16. 분야 그림 (SVG) · 안쪽 탭 · 나가기 단추
+ *      2026-08-17 추가 · style v1.1.0
+ * ========================================================================= */
+
+/* ---------- 분야 그림 ----------
+   표지 위에 선으로 그린 그림을 얹습니다. 색은 표지에 묻히도록 검정 반투명입니다. */
+.art .art-svg {
+  position: absolute; width: 52%; height: 52%;
+  color: rgba(0, 0, 0, .5);
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, .18));
+  transition: transform var(--fast);
+  pointer-events: none;
+}
+.album:hover .art-svg { transform: scale(1.06); }
+
+/* 그림이 들어오면 번호는 뒤로 물러납니다. */
+.art .num { position: absolute; top: 6px; left: 10px; font-size: 1.1rem;
+            color: rgba(0, 0, 0, .3); }
+
+/* ---------- 상세 화면 배너의 큰 그림 ---------- */
+.banner-art {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  width: 92px; height: 92px; color: rgba(0, 0, 0, .28);
+  pointer-events: none;
+}
+.banner-art svg { width: 100%; height: 100%; }
+@media (max-width: 420px) { .banner-art { width: 66px; height: 66px; right: 8px; } }
+
+/* ---------- 아래쪽 고정 바 썸네일 ---------- */
+.nowbar .thumb svg { width: 26px; height: 26px; color: rgba(0, 0, 0, .5); }
+
+/* ---------- 안쪽 탭 (교사 화면 · 학생 화면 미리보기) ---------- */
+.subtabs {
+  display: flex; gap: 6px; overflow-x: auto; margin: 4px 0 16px;
+  padding-bottom: 6px; -webkit-overflow-scrolling: touch;
+}
+.subtabs::-webkit-scrollbar { display: none; }
+.subtab {
+  flex: none; min-height: 40px; padding: 8px 16px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 999px;
+  color: var(--muted); font: inherit; font-size: .92rem; font-weight: 700;
+  cursor: pointer; white-space: nowrap;
+  transition: background var(--fast), color var(--fast), border-color var(--fast);
+}
+.subtab:hover { background: var(--card-2); }
+.subtab[aria-selected="true"] {
+  background: var(--accent); border-color: var(--accent); color: var(--accent-in);
+}
+.subpanel[hidden] { display: none; }
+
+/* 보기 전용 칸은 흐리게 — 학생 화면과 구분되도록 */
+.subpanel .t-input:disabled,
+.subpanel .t-select:disabled {
+  opacity: .55; cursor: default; background: var(--card-3);
+}
+.subpanel .album { cursor: default; }
+
+/* ---------- 상단바 나가기 / 로그아웃 단추 ---------- */
+#btnLogout, #btnTLogout { flex: none; margin-left: 8px; }
+@media (max-width: 420px) {
+  #btnLogout, #btnTLogout { padding: 6px 10px; font-size: .8rem; }
+}
+
+/* 인쇄할 때는 단추를 숨깁니다. */
+@media print { #btnLogout, #btnTLogout, .subtabs { display: none !important; } }
