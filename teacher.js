@@ -1,0 +1,498 @@
+/* ============================================================================
+ *  teacher.js — 수업자용 화면
+ *  버전: teacher v1.0.0 (2026-08-17)
+ * ==========================================================================*/
+
+const TEACHER_VERSION = 'teacher v1.1.0 (2026-08-17) 입장통제';
+console.log('%c' + TEACHER_VERSION, 'background:#F5A524;color:#000;padding:2px 8px;border-radius:4px');
+console.log('서버 주소:', SERVER_URL);
+
+const T = {
+  email: '',
+  cfg: {},            // 설정 시트에 적힌 값   { '전체': {...}, '3-1': {...} }
+  states: {},         // 서버가 계산한 지금 상태 { '3-1': {entry:{...}, submit:{...}} }
+  rows: [],           // 현황
+  roster: [],
+  cls: CLASS_LIST[0],
+  timerRefresh: null,
+  lastActive: Date.now()
+};
+
+$('#verLine').textContent = TEACHER_VERSION;
+
+/* ===========================================================================
+ *  1. 로그인 · 자동 로그아웃
+ * ========================================================================= */
+
+Auth.render($('#gsiBtn'), async (p) => {
+  $('#gateMsg').textContent = '확인하는 중…';
+  const res = await apiPost('teacherHello', { idToken: Auth.idToken });
+  if (!res || !res.ok) {
+    $('#gateMsg').innerHTML = `<span class="err">${esc(errText(res))}</span>`;
+    Auth.signOut();
+    return;
+  }
+  T.email = Auth.email;
+  $('#gateMsg').textContent = '';
+  $('#gate').classList.add('hidden');
+  $('#app').classList.remove('hidden');
+  $('#whoBox').innerHTML = esc(T.email);
+  $('#serverLine').textContent = `서버 ${res.version} · 시트 연결됨`;
+  boot();
+});
+
+/* 20분 동안 아무 조작이 없으면 로그아웃합니다. */
+['click', 'keydown', 'touchstart', 'mousemove'].forEach(ev =>
+  document.addEventListener(ev, () => { T.lastActive = Date.now(); }, { passive: true }));
+
+setInterval(() => {
+  if (!T.email) return;
+  const idle = Date.now() - T.lastActive;
+  const limit = TEACHER_IDLE_MINUTES * 60000;
+  const left = limit - idle;
+  $('#idleBar').className = 'statusbar ' + (left < 120000 ? 'closed' : 'open');
+  $('#idleBar').textContent = left < 120000
+    ? `조작이 없어 ${fmtLeft(left)} 뒤 자동 로그아웃됩니다`
+    : `수업자용 화면 · 조작이 없으면 ${TEACHER_IDLE_MINUTES}분 뒤 자동 로그아웃`;
+  if (left <= 0) location.reload();
+}, 1000);
+
+/* 탭 이동 */
+$$('.tab').forEach(t => t.addEventListener('click', () => {
+  const name = t.dataset.tab;
+  $$('.tab').forEach(x => x.setAttribute('aria-selected', String(x === t)));
+  ['control', 'status', 'roster', 'log'].forEach(n => $('#panel-' + n).hidden = (n !== name));
+  if (name === 'status') loadStatus();
+  if (name === 'roster') loadRoster();
+}));
+
+function boot() {
+  $('#selClass').innerHTML = CLASS_LIST.map(c =>
+    `<option value="${c}">${c}</option>`).join('');
+  $('#selClass').value = T.cls;
+  loadConfig();
+  startAuto();
+}
+/* ===========================================================================
+ *  2. 수업 통제 — 입장(수업 시간)과 제출을 따로 여닫습니다
+ * ========================================================================= */
+
+/** 수업 한 차시 길이(분). [수업 시작] 을 누르면 이만큼 열립니다. */
+const LESSON_MINUTES = 50;
+/** [제출 열기] 를 누르면 열리는 시간(분). */
+const SUBMIT_MINUTES = 25;
+
+async function loadConfig(quiet) {
+  const res = await apiPost('teacherConfig', { idToken: Auth.idToken });
+  if (!res || !res.ok) { if (!quiet) toast(errText(res), 'bad'); return; }
+  T.cfg = res.config || {};
+  T.states = res.states || {};
+  renderQuick();
+  renderConfig();
+}
+
+function cfgOf(cls) {
+  return T.cfg[cls] || { entry: '', entryFrom: '', entryTo: '',
+                         submit: '', resubmit: '', submitFrom: '', submitTo: '', notice: '' };
+}
+
+/** 시각을 시트에 적는 형식으로 */
+const whenText = d => fmtDT(d);
+const plusMin = (m) => new Date(Date.now() + m * 60000);
+
+/* ---------- 위쪽: 단추 하나로 하는 조작 ---------- */
+
+function renderQuick() {
+  $('#quickTable tbody').innerHTML = CLASS_LIST.map(c => {
+    const st = (T.states && T.states[c]) || null;
+    const e = st ? st.entry : null;
+    const s = st ? st.submit : null;
+
+    let badge = '<span class="badge none">닫힘</span>';
+    if (e && e.open) {
+      badge = '<span class="badge done">수업 중</span>';
+      if (s && s.open) badge += ' <span class="badge draft">제출 열림</span>';
+    } else if (e && e.reason === 'ENTRY_BEFORE') {
+      badge = '<span class="badge draft">시작 대기</span>';
+    } else if (e && e.reason === 'ENTRY_AFTER') {
+      badge = '<span class="badge none">종료됨</span>';
+    }
+
+    let until = '';
+    if (e && e.open && e.to) until = `<div class="dim" style="font-size:.78rem">종료 ${esc(fmtDT(e.to).slice(11))}</div>`;
+    if (s && s.open && s.to) until += `<div class="dim" style="font-size:.78rem">제출 마감 ${esc(fmtDT(s.to).slice(11))}</div>`;
+
+    return `<tr data-c="${c}">
+      <td><b>${c}</b></td>
+      <td>${badge}${until}</td>
+      <td class="num">
+        <button class="btn sm primary" data-a="lesson">수업 시작</button>
+        <button class="btn sm ghost"  data-a="lessonEnd">수업 종료</button></td>
+      <td class="num">
+        <button class="btn sm" data-a="subOpen">제출 열기</button>
+        <button class="btn sm ghost" data-a="subShut">제출 닫기</button></td>
+      <td class="num">
+        <button class="btn sm" data-a="both">수업+제출 함께 열기</button></td>
+    </tr>`;
+  }).join('');
+
+  $$('#quickTable [data-a]').forEach(b =>
+    b.addEventListener('click', () => quick(b.closest('tr').dataset.c, b.dataset.a)));
+}
+
+/** 빠른 조작 한 번 = 설정 한 줄 고치기 */
+async function quick(cls, what) {
+  let patch, msg;
+
+  if (what === 'lesson') {
+    patch = { entry: 'Y', entryFrom: whenText(new Date()), entryTo: whenText(plusMin(LESSON_MINUTES)),
+              submit: 'N', submitFrom: '', submitTo: '' };
+    msg = `${cls} 수업을 열었습니다 · ${LESSON_MINUTES}분 (제출은 아직 닫힘)`;
+
+  } else if (what === 'lessonEnd') {
+    patch = { entry: 'N', entryFrom: '', entryTo: '', submit: 'N', submitFrom: '', submitTo: '' };
+    msg = `${cls} 수업을 종료했습니다`;
+
+  } else if (what === 'subOpen') {
+    const st = (T.states && T.states[cls]) || null;
+    if (!st || !st.entry.open) {
+      if (!confirm(`${cls} 은 지금 수업이 열려 있지 않습니다.\n수업도 함께 열까요?`)) return;
+      return quick(cls, 'both');
+    }
+    patch = { submit: 'Y', submitFrom: whenText(new Date()), submitTo: whenText(plusMin(SUBMIT_MINUTES)) };
+    msg = `${cls} 제출을 열었습니다 · ${SUBMIT_MINUTES}분`;
+
+  } else if (what === 'subShut') {
+    patch = { submit: 'N', submitFrom: '', submitTo: '' };
+    msg = `${cls} 제출을 닫았습니다`;
+
+  } else if (what === 'both') {
+    patch = { entry: 'Y', entryFrom: whenText(new Date()), entryTo: whenText(plusMin(LESSON_MINUTES)),
+              submit: 'Y', submitFrom: whenText(new Date()), submitTo: whenText(plusMin(SUBMIT_MINUTES)) };
+    msg = `${cls} 수업 ${LESSON_MINUTES}분 · 제출 ${SUBMIT_MINUTES}분을 함께 열었습니다`;
+  } else return;
+
+  const res = await apiPost('teacherSetConfig', { idToken: Auth.idToken, cls, patch });
+  if (res && res.ok) {
+    toast(msg, 'ok', 4000);
+    T.cfg = res.config || T.cfg;
+    T.states = res.states || T.states;
+    renderQuick(); renderConfig();
+  } else toast(errText(res), 'bad');
+}
+
+$('#btnReloadCfg').addEventListener('click', () => loadConfig());
+
+$('#btnCloseAll').addEventListener('click', async () => {
+  if (!confirm('모든 학급의 수업과 제출을 닫습니다.\n작성 중이던 학생은 더 이상 서버에 저장되지 않습니다.\n\n진행할까요?')) return;
+  const shut = { entry: 'N', entryFrom: '', entryTo: '', submit: 'N', submitFrom: '', submitTo: '' };
+  const patches = { '전체': shut };
+  CLASS_LIST.forEach(c => patches[c] = shut);
+  const res = await apiPost('teacherSetConfigAll', { idToken: Auth.idToken, patches });
+  if (res && res.ok) {
+    toast('모든 학급을 닫았습니다', 'ok');
+    T.cfg = res.config; T.states = res.states || T.states;
+    renderQuick(); renderConfig();
+  } else toast(errText(res), 'bad');
+});
+
+/* ---------- 아래쪽: 손으로 고치기 ---------- */
+
+function renderConfig() {
+  const g = cfgOf('전체');
+  $('#globalRow').innerHTML = `
+    <label class="switch"><input type="checkbox" id="gEntry" ${g.entry === 'Y' ? 'checked' : ''}>
+      <span class="track2"></span><span class="lb">입장 허용</span></label>
+    <label class="field"><span>입장 시작</span>
+      <input class="t-input" id="gEntryFrom" type="text" placeholder="비우면 제한 없음"
+             value="${esc(g.entryFrom)}" style="width:175px"></label>
+    <label class="field"><span>입장 마감</span>
+      <input class="t-input" id="gEntryTo" type="text" placeholder="비우면 제한 없음"
+             value="${esc(g.entryTo)}" style="width:175px"></label>
+
+    <label class="switch"><input type="checkbox" id="gSubmit" ${g.submit === 'Y' ? 'checked' : ''}>
+      <span class="track2"></span><span class="lb">제출 허용</span></label>
+    <label class="switch"><input type="checkbox" id="gRe" ${g.resubmit === 'Y' ? 'checked' : ''}>
+      <span class="track2"></span><span class="lb">다시 내기 허용</span></label>
+    <label class="field"><span>제출 시작</span>
+      <input class="t-input" id="gSubFrom" type="text" placeholder="비우면 제한 없음"
+             value="${esc(g.submitFrom)}" style="width:175px"></label>
+    <label class="field"><span>제출 마감</span>
+      <input class="t-input" id="gSubTo" type="text" placeholder="비우면 제한 없음"
+             value="${esc(g.submitTo)}" style="width:175px"></label>
+
+    <label class="field" style="flex:1 1 220px"><span>학생 화면에 띄울 공지</span>
+      <input class="t-input" id="gNotice" type="text" value="${esc(g.notice)}"
+             placeholder="예) 5번 문항 출처 두 곳 이상"></label>`;
+
+  const sel = (k, v, yes, no) => `
+    <select class="t-select" data-k="${k}" style="min-width:92px">
+      <option value=""  ${v === '' ? 'selected' : ''}>기본값</option>
+      <option value="Y" ${v === 'Y' ? 'selected' : ''}>${yes}</option>
+      <option value="N" ${v === 'N' ? 'selected' : ''}>${no}</option>
+    </select>`;
+
+  $('#clsTable tbody').innerHTML = CLASS_LIST.map(c => {
+    const v = cfgOf(c);
+    return `<tr data-c="${c}">
+      <td><b>${c}</b></td>
+      <td>${sel('entry', v.entry, '열림', '닫힘')}</td>
+      <td><input class="t-input" data-k="entryFrom" type="text" value="${esc(v.entryFrom)}"
+                 placeholder="기본값" style="width:160px"></td>
+      <td><input class="t-input" data-k="entryTo" type="text" value="${esc(v.entryTo)}"
+                 placeholder="기본값" style="width:160px"></td>
+      <td>${sel('submit', v.submit, '열림', '닫힘')}</td>
+      <td>${sel('resubmit', v.resubmit, '허용', '금지')}</td>
+      <td><input class="t-input" data-k="submitFrom" type="text" value="${esc(v.submitFrom)}"
+                 placeholder="기본값" style="width:160px"></td>
+      <td><input class="t-input" data-k="submitTo" type="text" value="${esc(v.submitTo)}"
+                 placeholder="기본값" style="width:160px"></td>
+      <td><input class="t-input" data-k="notice" type="text" value="${esc(v.notice)}"
+                 placeholder="이 학급에만" style="min-width:150px"></td>
+    </tr>`;
+  }).join('');
+}
+
+$('#btnSaveCfg').addEventListener('click', async () => {
+  const patches = {};
+  patches['전체'] = {
+    entry:      $('#gEntry').checked ? 'Y' : 'N',
+    entryFrom:  $('#gEntryFrom').value.trim(),
+    entryTo:    $('#gEntryTo').value.trim(),
+    submit:     $('#gSubmit').checked ? 'Y' : 'N',
+    resubmit:   $('#gRe').checked ? 'Y' : 'N',
+    submitFrom: $('#gSubFrom').value.trim(),
+    submitTo:   $('#gSubTo').value.trim(),
+    notice:     $('#gNotice').value.trim()
+  };
+  $$('#clsTable tbody tr').forEach(tr => {
+    const o = {};
+    $$('[data-k]', tr).forEach(el => o[el.dataset.k] = el.value.trim());
+    patches[tr.dataset.c] = o;
+  });
+
+  const res = await apiPost('teacherSetConfigAll', { idToken: Auth.idToken, patches });
+  if (res && res.ok) {
+    toast('설정을 저장했습니다', 'ok');
+    T.cfg = res.config; T.states = res.states || T.states;
+    renderQuick(); renderConfig();
+  } else toast(errText(res), 'bad');
+});
+
+/* ===========================================================================
+ *  3. 제출 현황
+ * ========================================================================= */
+
+$('#selClass').addEventListener('change', e => { T.cls = e.target.value; loadStatus(); });
+$('#btnRefresh').addEventListener('click', loadStatus);
+$('#findBox').addEventListener('input', renderStatus);
+$('#autoRefresh').addEventListener('change', startAuto);
+
+function startAuto() {
+  clearInterval(T.timerRefresh);
+  if ($('#autoRefresh') && $('#autoRefresh').checked) {
+    T.timerRefresh = setInterval(() => {
+      if (!$('#panel-status').hidden) loadStatus(true);
+      if (!$('#panel-control').hidden) loadConfig(true);
+    }, 10000);
+  }
+}
+
+async function loadStatus(quiet) {
+  const res = await apiPost('teacherStatus', { idToken: Auth.idToken, cls: T.cls });
+  if (!res || !res.ok) { if (!quiet) toast(errText(res), 'bad'); return; }
+  T.rows = res.rows || [];
+  renderStatus();
+}
+
+function renderStatus() {
+  const q = ($('#findBox').value || '').trim().toLowerCase();
+  const rows = T.rows.filter(r =>
+    !q || String(r.sid).includes(q) || String(r.name).toLowerCase().includes(q));
+
+  const done = T.rows.filter(r => r.state === 'done').length;
+  const draft = T.rows.filter(r => r.state === 'draft').length;
+  $('#kTotal').textContent = T.rows.length;
+  $('#kDone').textContent = done;
+  $('#kDraft').textContent = draft;
+  $('#kNone').textContent = T.rows.length - done - draft;
+
+  $('#stTable tbody').innerHTML = rows.map(r => {
+    const b = r.state === 'done' ? '<span class="badge done">제출</span>'
+            : r.state === 'draft' ? '<span class="badge draft">작성 중</span>'
+            : '<span class="badge none">시작 안 함</span>';
+    return `<tr>
+      <td class="num">${esc(r.sid)}</td>
+      <td>${esc(r.name)}</td>
+      <td>${b}${r.count > 1 ? ` <span class="dim">${r.count}회</span>` : ''}</td>
+      <td>${esc(r.field || '')}</td>
+      <td class="num">${r.progress != null ? r.progress + '/9' : ''}</td>
+      <td class="num dim">${esc(r.at ? String(r.at).slice(5, 16) : '')}</td>
+      <td class="dim" style="font-size:.8rem">${esc(r.email || '')}</td>
+      <td>${r.state === 'none' ? '' :
+        `<button class="btn sm" data-view="${esc(r.sid)}">보기</button>`}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="dim">해당하는 학생이 없습니다.</td></tr>';
+
+  $$('#stTable [data-view]').forEach(b =>
+    b.addEventListener('click', () => viewAnswer(b.dataset.view)));
+}
+
+const Q_TITLES = ['어떤 분야를 골랐나요?', '그 분야를 고른 이유는?',
+  '이 산업은 무엇을 하는 곳인가요?', '이 산업에는 어떤 직업이 있나요?',
+  '조사한 곳', '음악은 어떤 장면에 쓰이나요?', '음악이 없다면 무엇이 사라질까요?',
+  '이 분야와 나를 이어 주는 점', '발표용 핵심 세 문장'];
+
+function viewAnswer(sid) {
+  const r = T.rows.find(x => String(x.sid) === String(sid));
+  if (!r) return;
+  const d = r.data || {};
+  $('#vmTitle').textContent = `${r.sid} ${r.name} · ${r.field || '분야 미선택'}`;
+  $('#vmBody').innerHTML = `
+    <p class="dim">${r.state === 'done' ? '제출본' : '작성 중(임시저장본)'} ·
+       마지막 ${esc(r.at || '')} · 작성 ${r.progress || 0}/9
+       ${r.count > 1 ? ' · ' + r.count + '회 제출' : ''}</p>
+    ${[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => {
+      const v = n === 1 ? (d.q1name || d.q1 || '') : (d['q' + n] || '');
+      const mark = (n === 7) ? ' ★ 상·중을 가르는 문항' : '';
+      return `<div class="answer">
+        <div class="an-q">${n}. ${esc(Q_TITLES[n - 1])}${mark}</div>
+        <div class="an-a">${esc(v) || '<span class="dim">비어 있음</span>'}</div>
+      </div>`;
+    }).join('')}`;
+  $('#viewModal').hidden = false;
+}
+$('#vmClose').addEventListener('click', () => $('#viewModal').hidden = true);
+$('#viewModal').addEventListener('click', e => {
+  if (e.target.id === 'viewModal') $('#viewModal').hidden = true;
+});
+
+/* ---------- 내려받기 ---------- */
+const csvQ = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+
+function rowsToCsv(rows) {
+  const head = ['학급', '학번', '이름', '상태', '제출횟수', '작성수', '마지막시각', '계정',
+    '고른분야', '2.고른이유', '3.무슨일', '4.직업', '5.출처',
+    '6.쓰이는장면', '7.없다면', '8.나와의연결', '9.핵심세문장', '모둠', '순서'];
+  const body = rows.map(r => {
+    const d = r.data || {};
+    return [r.cls, r.sid, r.name,
+      r.state === 'done' ? '제출' : (r.state === 'draft' ? '작성중' : '미시작'),
+      r.count || 0, r.progress || 0, r.at || '', r.email || '',
+      d.q1name || '', d.q2 || '', d.q3 || '', d.q4 || '', d.q5 || '',
+      d.q6 || '', d.q7 || '', d.q8 || '', String(d.q9 || '').replace(/\n/g, ' / '),
+      d.group || '', d.order || ''].map(csvQ).join(',');
+  });
+  return '\uFEFF' + head.map(csvQ).join(',') + '\r\n' + body.join('\r\n');
+}
+
+function dl(name, text) {
+  const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+}
+
+$('#btnCsvClass').addEventListener('click', () => {
+  dl(`음악산업탐구_${T.cls}_${fmtDT(new Date()).replace(/[: ]/g, '')}.csv`, rowsToCsv(T.rows));
+  toast('CSV를 내려받았습니다', 'ok');
+});
+
+$('#btnCsvAll').addEventListener('click', async () => {
+  toast('전체 학급을 모으는 중…');
+  const all = [];
+  for (const c of CLASS_LIST) {
+    const res = await apiPost('teacherStatus', { idToken: Auth.idToken, cls: c });
+    if (res && res.ok) all.push(...res.rows);
+  }
+  dl(`음악산업탐구_전체_${fmtDT(new Date()).replace(/[: ]/g, '')}.csv`, rowsToCsv(all));
+  toast(`전체 ${all.length}명분을 내려받았습니다`, 'ok');
+});
+
+$('#btnMissing').addEventListener('click', () => {
+  const miss = T.rows.filter(r => r.state !== 'done')
+    .map(r => `${r.sid} ${r.name}`).join('\n');
+  if (!miss) { toast('미제출자가 없습니다', 'ok'); return; }
+  navigator.clipboard.writeText(miss)
+    .then(() => toast(`미제출 ${miss.split('\n').length}명을 복사했습니다`, 'ok'))
+    .catch(() => alert(miss));
+});
+
+/* ===========================================================================
+ *  4. 명렬표
+ * ========================================================================= */
+
+async function loadRoster() {
+  const res = await apiPost('teacherRoster', { idToken: Auth.idToken });
+  if (!res || !res.ok) { toast(errText(res), 'bad'); return; }
+  T.roster = res.rows || [];
+  $('#rsTable tbody').innerHTML = T.roster.map(r => `<tr>
+    <td class="num">${esc(r.sid)}</td><td>${esc(r.name)}</td><td>${esc(r.cls)}</td>
+    <td class="dim">${esc(r.pw)}</td>
+    <td class="dim" style="font-size:.8rem">${esc(r.email) || '<span class="badge none">미연결</span>'}</td>
+    <td class="num dim">${esc(r.last ? String(r.last).slice(5, 16) : '')}</td>
+  </tr>`).join('') || '<tr><td colspan="6" class="dim">명렬표가 비어 있습니다.</td></tr>';
+  toast(`명렬표 ${T.roster.length}명`, 'ok');
+}
+$('#btnRosterLoad').addEventListener('click', loadRoster);
+
+$('#btnRosterSave').addEventListener('click', async () => {
+  const text = $('#rosterPaste').value.trim();
+  if (!text) { toast('붙여 넣은 내용이 없습니다', 'warn'); return; }
+
+  const rows = [];
+  const bad = [];
+  text.split(/\r?\n/).forEach((line, i) => {
+    if (!line.trim()) return;
+    const p = line.split(/[\t,]/).map(s => s.trim());
+    if (!/^\d{4}$/.test(p[0])) { bad.push(`${i + 1}줄: ${line.slice(0, 24)}`); return; }
+    rows.push({ sid: p[0], name: p[1] || '', pw: p[2] || '' });
+  });
+
+  if (bad.length) {
+    if (!confirm(`학번이 네 자리가 아닌 줄 ${bad.length}개는 건너뜁니다.\n\n${bad.slice(0, 5).join('\n')}\n\n계속할까요?`)) return;
+  }
+  if (!rows.length) { toast('넣을 줄이 없습니다', 'warn'); return; }
+
+  /* 학번 중복은 여기서 먼저 걸러 냅니다. */
+  const seen = {}; const dup = [];
+  rows.forEach(r => { if (seen[r.sid]) dup.push(r.sid); seen[r.sid] = true; });
+  if (dup.length) { toast(`학번이 겹칩니다: ${dup.slice(0, 5).join(', ')}`, 'bad', 5000); return; }
+
+  const res = await apiPost('teacherRosterUpsert', { idToken: Auth.idToken, rows });
+  if (res && res.ok) {
+    toast(`새로 ${res.added}명, 고침 ${res.updated}명`, 'ok', 4000);
+    $('#rosterPaste').value = '';
+    loadRoster();
+  } else toast(errText(res), 'bad');
+});
+
+$('#btnResetBind').addEventListener('click', async () => {
+  const sid = $('#resetSid').value.trim();
+  if (!/^\d{4}$/.test(sid)) { toast('학번 네 자리를 적어 주세요', 'warn'); return; }
+  if (!confirm(`${sid} 학번의 계정 연결을 풉니다.\n다음에 들어오는 계정으로 다시 고정됩니다.`)) return;
+  const res = await apiPost('teacherResetBinding', { idToken: Auth.idToken, sid });
+  if (res && res.ok) { toast(`${sid} 연결을 풀었습니다`, 'ok'); $('#resetSid').value = ''; loadRoster(); }
+  else toast(errText(res), 'bad');
+});
+
+/* ===========================================================================
+ *  5. 기록
+ * ========================================================================= */
+
+$('#btnLogLoad').addEventListener('click', async () => {
+  const res = await apiPost('teacherLogs', { idToken: Auth.idToken });
+  if (!res || !res.ok) { toast(errText(res), 'bad'); return; }
+  $('#lgTable tbody').innerHTML = (res.rows || []).map(r => `<tr>
+    <td class="num dim">${esc(String(r[0]).slice(5, 19))}</td>
+    <td>${esc(r[1])}</td>
+    <td class="dim" style="font-size:.8rem">${esc(r[2])}</td>
+    <td class="num">${esc(r[3])}</td>
+    <td>${r[4] === 'OK' ? '<span class="badge done">OK</span>'
+                        : '<span class="badge draft">' + esc(r[4]) + '</span>'}</td>
+    <td class="dim">${esc(r[5])}</td>
+  </tr>`).join('') || '<tr><td colspan="6" class="dim">기록이 없습니다.</td></tr>';
+  toast(`${(res.rows || []).length}줄`, 'ok');
+});

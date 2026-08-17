@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#121212">
+<meta name="robots" content="noindex">
+
+<!-- 탭에 보이는 이름. 학생용(index.html)과 다르게 두었습니다. -->
+<title>🎛 수업자용 · 음악 산업 탐구</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23F5A524'/%3E%3Ctext x='16' y='23' font-size='18' text-anchor='middle'%3E%F0%9F%8E%9B%3C/text%3E%3C/svg%3E">
+
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body class="teacher">
+
+<!-- ==========================================================================
+     1. 로그인
+     ======================================================================= -->
+<div id="gate" class="gate">
+  <div class="gate-box">
+    <h1>수업자용 화면</h1>
+    <p class="sub">음악 산업 탐구 · 생활화 영역<br>
+      <span class="dim">교사 계정만 들어올 수 있습니다.</span></p>
+    <div class="gsi" id="gsiBtn"></div>
+    <div class="gate-msg center" id="gateMsg"></div>
+    <p class="dim center" style="margin-top:20px; font-size:.8rem">
+      학생용 주소: <a href="index.html">index.html</a>
+    </p>
+    <p class="dim" style="margin-top:10px; font-size:.8rem" id="verLine"></p>
+  </div>
+</div>
+
+
+<!-- ==========================================================================
+     2. 본 화면
+     ======================================================================= -->
+<div id="app" class="hidden">
+
+  <header class="topbar">
+    <div class="topbar-in">
+      <div class="brand">
+        <div class="logo">🎛</div>
+        <div class="titles">
+          <div class="t1">수업자용 · 음악 산업 탐구</div>
+          <div class="t2" id="serverLine">서버 확인 중…</div>
+        </div>
+        <div class="who" id="whoBox"></div>
+      </div>
+
+      <nav class="tabs" role="tablist" aria-label="화면 이동">
+        <button class="tab" role="tab" data-tab="control" aria-selected="true">수업 통제</button>
+        <button class="tab" role="tab" data-tab="status"  aria-selected="false">제출 현황</button>
+        <button class="tab" role="tab" data-tab="roster"  aria-selected="false">명렬표</button>
+        <button class="tab" role="tab" data-tab="log"     aria-selected="false">기록</button>
+      </nav>
+    </div>
+    <div class="statusbar wait" id="idleBar"></div>
+  </header>
+
+  <main style="padding-bottom:40px">
+
+    <!-- ---------- 탭 1 · 수업 통제 ---------- -->
+    <section class="panel" id="panel-control" role="tabpanel">
+
+      <div class="notice">
+        <b>입장</b>은 학생이 로그인해서 들어올 수 있는 시간(= 수업 시간)이고,
+        <b>제출</b>은 그 안에서 [지금 제출하기]가 되는 시간입니다.
+        입장이 닫히면 제출도 함께 닫히고, 서버 저장도 멈춥니다.
+      </div>
+
+      <div class="card">
+        <h2>수업 중 조작</h2>
+        <p class="muted">지금 수업하는 학급 줄에서 단추 하나만 누르면 됩니다.
+          시각은 서버가 기록하므로 학생 기기 시계를 바꿔도 소용이 없습니다.</p>
+        <div class="tb-scroll" style="max-height:none">
+          <table class="tb" id="quickTable">
+            <thead><tr>
+              <th>학급</th><th>지금 상태</th><th>수업</th><th>제출</th><th>한 번에</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="btnrow" style="margin-top:12px">
+          <button class="btn" id="btnReloadCfg">상태 새로 고침</button>
+          <button class="btn danger" id="btnCloseAll">모든 학급 수업 종료</button>
+        </div>
+      </div>
+
+      <details class="card">
+        <summary style="cursor:pointer; font-weight:700; font-size:1.15rem; min-height:44px;
+                        display:flex; align-items:center">
+          손으로 세밀하게 고치기
+        </summary>
+
+        <p class="muted" style="margin-top:12px">
+          시각은 <code>2026-09-01 10:20</code> 또는 <code>10:20</code>(오늘) 형식으로 적습니다.
+          비우면 시간 제한이 없다는 뜻입니다.
+          학급 칸을 <b>기본값</b>으로 두면 아래 [모든 학급 기본값]을 따릅니다.</p>
+
+        <h3 style="margin-top:18px">모든 학급 기본값</h3>
+        <div class="row-wrap" id="globalRow"></div>
+
+        <h3 style="margin-top:22px">학급별</h3>
+        <div class="tb-scroll" style="max-height:none">
+          <table class="tb" id="clsTable">
+            <thead><tr>
+              <th>학급</th>
+              <th>입장</th><th>입장 시작</th><th>입장 마감</th>
+              <th>제출</th><th>다시 내기</th><th>제출 시작</th><th>제출 마감</th>
+              <th>공지</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="btnrow" style="margin-top:12px">
+          <button class="btn primary" id="btnSaveCfg">바뀐 설정 저장</button>
+        </div>
+      </details>
+    </section>
+
+    <!-- ---------- 탭 2 · 제출 현황 ---------- -->
+    <section class="panel" id="panel-status" role="tabpanel" hidden>
+      <div class="card">
+        <div class="row-wrap">
+          <label class="field"><span>학급</span>
+            <select class="t-select" id="selClass"></select></label>
+          <label class="field"><span>이름·학번 찾기</span>
+            <input class="t-input" id="findBox" type="search" placeholder="예) 3301 또는 홍길동"></label>
+          <label class="switch" style="margin-left:auto">
+            <input type="checkbox" id="autoRefresh" checked><span class="track2"></span>
+            <span class="lb">10초마다 새로 고침</span></label>
+          <button class="btn" id="btnRefresh">지금 새로 고침</button>
+        </div>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi"><div class="k">명렬표</div><div class="v" id="kTotal">0</div></div>
+        <div class="kpi hi"><div class="k">제출 완료</div><div class="v" id="kDone">0</div></div>
+        <div class="kpi"><div class="k">작성 중</div><div class="v" id="kDraft">0</div></div>
+        <div class="kpi bad"><div class="k">시작 안 함</div><div class="v" id="kNone">0</div></div>
+      </div>
+
+      <div class="tb-scroll">
+        <table class="tb" id="stTable">
+          <thead><tr>
+            <th>학번</th><th>이름</th><th>상태</th><th>분야</th>
+            <th>작성</th><th>마지막 시각</th><th>계정</th><th>보기</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="btnrow" style="margin-top:12px">
+        <button class="btn" id="btnCsvClass">이 학급 CSV 내려받기</button>
+        <button class="btn" id="btnCsvAll">전체 학급 CSV 내려받기</button>
+        <button class="btn" id="btnMissing">미제출 명단 복사</button>
+      </div>
+    </section>
+
+    <!-- ---------- 탭 3 · 명렬표 ---------- -->
+    <section class="panel" id="panel-roster" role="tabpanel" hidden>
+      <div class="card">
+        <h2>명렬표 한 번에 넣기</h2>
+        <p class="muted">엑셀에서 <b>학번 / 이름 / 비밀번호</b> 세 칸을 복사해 아래에 붙여 넣으세요.
+          쉼표나 탭 어느 쪽이든 됩니다. 이미 있는 학번은 이름과 비밀번호만 바뀝니다.</p>
+        <textarea class="t-input" id="rosterPaste" placeholder="3301	홍길동	a1b2c3
+3302	김철수	d4e5f6"></textarea>
+        <div class="btnrow" style="margin-top:10px">
+          <button class="btn primary" id="btnRosterSave">명렬표에 넣기</button>
+          <button class="btn" id="btnRosterLoad">지금 명렬표 보기</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>계정 연결 풀기</h2>
+        <p class="muted">한 번 들어온 학번은 그 구글 계정에 고정됩니다.
+          다른 사람이 잘못 들어왔거나 계정을 바꿔야 할 때만 풀어 주세요.</p>
+        <div class="row-wrap">
+          <input class="t-input" id="resetSid" type="text" inputmode="numeric" maxlength="4"
+                 placeholder="학번 네 자리" style="width:160px">
+          <button class="btn danger" id="btnResetBind">이 학번의 계정 연결 풀기</button>
+        </div>
+      </div>
+
+      <div class="tb-scroll">
+        <table class="tb" id="rsTable">
+          <thead><tr><th>학번</th><th>이름</th><th>반</th><th>비밀번호</th>
+            <th>연결된 계정</th><th>최근 접속</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ---------- 탭 4 · 기록 ---------- -->
+    <section class="panel" id="panel-log" role="tabpanel" hidden>
+      <div class="card">
+        <p class="muted">거절된 접속과 제출을 시간순으로 보여 줍니다. 가장 최근 200줄입니다.</p>
+        <button class="btn" id="btnLogLoad">기록 불러오기</button>
+      </div>
+      <div class="tb-scroll">
+        <table class="tb" id="lgTable">
+          <thead><tr><th>시각</th><th>동작</th><th>계정</th><th>학번</th>
+            <th>결과</th><th>사유</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="modal" id="viewModal" hidden>
+    <div class="modal-box">
+      <div class="modal-head">
+        <h2 id="vmTitle" style="margin:0">학생 답안</h2>
+        <button class="btn sm ghost" id="vmClose">닫기</button>
+      </div>
+      <div id="vmBody"></div>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="industries.js"></script>
+<script src="common.js"></script>
+<script src="teacher.js"></script>
+<script src="https://accounts.google.com/gsi/client?onload=onGsiLoad" async defer></script>
+</body>
+</html>
