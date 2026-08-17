@@ -727,3 +727,57 @@ body.exam .nowbar { border-top-color: #A3122A; }
   border-color: rgba(245, 165, 36, .5);
   background: rgba(245, 165, 36, .08);
 }
+
+/* ---------------------------------------------------------------------------
+ *  18. 수업 통제 단추 — 켜짐/꺼짐이 한눈에 보이게 (2026-08-17)
+ *
+ *  · 꺼져 있으면 테두리만 (그 색으로 물들 수 있다는 뜻)
+ *  · 켜져 있으면 그 색으로 꽉 채움 + ✓
+ * -------------------------------------------------------------------------*/
+
+.btn.act {
+  background: transparent; font-weight: 700;
+  border-width: 2px; min-width: 104px;
+  transition: background var(--fast), color var(--fast), border-color var(--fast);
+}
+.btn.act.on { color: #0B0B0B; border-color: transparent; }
+
+/* 수업 = 초록 */
+.act-lesson       { color: #55D98A; border-color: #2C6B45; }
+.act-lesson:hover { background: rgba(29, 185, 84, .14); }
+.act-lesson.on    { background: #1DB954; }
+.act-lesson.on:hover { background: #22CE62; }
+
+/* 제출 = 노랑 */
+.act-submit       { color: #F5C518; border-color: #6E5A12; }
+.act-submit:hover { background: rgba(245, 197, 24, .14); }
+.act-submit.on    { background: #F5C518; }
+.act-submit.on:hover { background: #FFD634; }
+
+/* 둘 다 = 파랑 */
+.act-both       { color: #78B8F5; border-color: #2A4E75; }
+.act-both:hover { background: rgba(120, 184, 245, .14); }
+.act-both.on    { background: #5BA7F0; }
+.act-both.on:hover { background: #74B6F5; }
+
+/* 수행평가 = 빨강 */
+.act-exam       { color: #FF8195; border-color: #7A2632; }
+.act-exam:hover { background: rgba(226, 61, 90, .14); }
+.act-exam.on    { background: #E23D5A; color: #fff; }
+.act-exam.on:hover { background: #F04E6B; }
+
+/* 닫기 계열은 조용하게. 닫을 게 없으면 더 흐리게. */
+.btn.act-off {
+  background: transparent; border-color: var(--line); color: var(--muted);
+}
+.btn.act-off:hover { background: #2A2A2A; color: var(--text); }
+.btn.act-off.dim   { opacity: .38; }
+
+/* 열려 있는 학급 줄은 왼쪽에 색 띠를 둡니다. */
+#quickTable tbody tr.row-on  td:first-child { box-shadow: inset 3px 0 0 #1DB954; }
+#quickTable tbody tr.row-exam td:first-child { box-shadow: inset 3px 0 0 #E23D5A; }
+#quickTable tbody tr.row-exam { background: rgba(226, 61, 90, .06); }
+
+/* 단추가 두 개씩 들어가는 칸은 줄바꿈을 허용합니다. */
+#quickTable td.num { white-space: normal; }
+#quickTable td.num .btn { margin: 2px 3px; }

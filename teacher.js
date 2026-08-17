@@ -3,7 +3,7 @@
  *  버전: teacher v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const TEACHER_VERSION = 'teacher v1.4.0 (2026-08-17) 평가모드';
+const TEACHER_VERSION = 'teacher v1.5.0 (2026-08-17) 서버시각+단추색';
 console.log('%c' + TEACHER_VERSION, 'background:#F5A524;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -163,20 +163,30 @@ function renderQuick() {
     if (e && e.open && e.to) until = `<div class="dim" style="font-size:.78rem">종료 ${esc(fmtDT(e.to).slice(11))}</div>`;
     if (s && s.open && s.to) until += `<div class="dim" style="font-size:.78rem">제출 마감 ${esc(fmtDT(s.to).slice(11))}</div>`;
 
-    return `<tr data-c="${c}">
+    /* 지금 켜져 있는 것은 채운 색으로, 꺼져 있는 것은 테두리만으로 보여 줍니다.
+       한눈에 "지금 무엇이 열려 있는지" 알 수 있게 하기 위함입니다. */
+    const lessonOn = !!(e && e.open) && !isExam;
+    const subOn    = !!(s && s.open) && !isExam;
+    const bothOn   = lessonOn && subOn;
+
+    return `<tr data-c="${c}" class="${isExam ? 'row-exam' : (lessonOn ? 'row-on' : '')}">
       <td><b>${c}</b></td>
       <td>${badge}${until}</td>
       <td class="num">
-        <button class="btn sm primary" data-a="lesson">수업 시작</button>
-        <button class="btn sm ghost"  data-a="lessonEnd">수업 종료</button></td>
+        <button class="btn sm act act-lesson ${lessonOn ? 'on' : ''}" data-a="lesson">
+          ${lessonOn ? '✓ 수업 중' : '수업 시작'}</button>
+        <button class="btn sm act-off ${lessonOn || isExam ? '' : 'dim'}" data-a="lessonEnd">수업 종료</button></td>
       <td class="num">
-        <button class="btn sm" data-a="subOpen">제출 열기</button>
-        <button class="btn sm ghost" data-a="subShut">제출 닫기</button></td>
+        <button class="btn sm act act-submit ${subOn ? 'on' : ''}" data-a="subOpen">
+          ${subOn ? '✓ 제출 열림' : '제출 열기'}</button>
+        <button class="btn sm act-off ${subOn ? '' : 'dim'}" data-a="subShut">제출 닫기</button></td>
       <td class="num">
-        <button class="btn sm" data-a="both">수업+제출 함께 열기</button></td>
+        <button class="btn sm act act-both ${bothOn ? 'on' : ''}" data-a="both">
+          ${bothOn ? '✓ 둘 다 열림' : '수업+제출 함께'}</button></td>
       <td class="num">
-        <button class="btn sm ${isExam ? 'danger' : ''}" data-a="exam">평가 시작</button>
-        <button class="btn sm ghost" data-a="examEnd">평가 종료</button></td>
+        <button class="btn sm act act-exam ${isExam ? 'on' : ''}" data-a="exam">
+          ${isExam ? '✓ 평가 중' : '평가 시작'}</button>
+        <button class="btn sm act-off ${isExam ? '' : 'dim'}" data-a="examEnd">평가 종료</button></td>
     </tr>`;
   }).join('');
 
@@ -189,8 +199,7 @@ async function quick(cls, what) {
   let patch, msg;
 
   if (what === 'lesson') {
-    patch = { entry: 'Y', entryFrom: whenText(new Date()), entryTo: whenText(plusMin(LESSON_MINUTES)),
-              submit: 'N', submitFrom: '', submitTo: '' };
+    patch = { entryMin: LESSON_MINUTES, submit: 'N', submitFrom: '', submitTo: '' };
     msg = `${cls} 수업을 열었습니다 · ${LESSON_MINUTES}분 (제출은 아직 닫힘)`;
 
   } else if (what === 'lessonEnd') {
@@ -203,7 +212,7 @@ async function quick(cls, what) {
       if (!confirm(`${cls} 은 지금 수업이 열려 있지 않습니다.\n수업도 함께 열까요?`)) return;
       return quick(cls, 'both');
     }
-    patch = { submit: 'Y', submitFrom: whenText(new Date()), submitTo: whenText(plusMin(SUBMIT_MINUTES)) };
+    patch = { submitMin: SUBMIT_MINUTES };
     msg = `${cls} 제출을 열었습니다 · ${SUBMIT_MINUTES}분`;
 
   } else if (what === 'exam') {
@@ -217,10 +226,7 @@ async function quick(cls, what) {
       `· 학생 화면은 백지에서 시작합니다 (이전에 쓴 내용 안 불러옴)\n` +
       `· 태블릿에도 서버에도 임시저장이 남지 않습니다\n` +
       `· 시간이 끝나면 자동으로 제출됩니다\n\n시작할까요?`)) return;
-    patch = { exam: 'Y',
-              entry: 'Y', entryFrom: whenText(new Date()), entryTo: whenText(plusMin(EXAM_MINUTES)),
-              submit: 'Y', submitFrom: whenText(new Date()), submitTo: whenText(plusMin(EXAM_MINUTES)),
-              resubmit: 'N' };
+    patch = { exam: 'Y', entryMin: EXAM_MINUTES, submitMin: EXAM_MINUTES, resubmit: 'N' };
     msg = `${cls} 수행평가를 시작했습니다 · ${EXAM_MINUTES}분`;
 
   } else if (what === 'examEnd') {
@@ -234,8 +240,7 @@ async function quick(cls, what) {
     msg = `${cls} 제출을 닫았습니다`;
 
   } else if (what === 'both') {
-    patch = { entry: 'Y', entryFrom: whenText(new Date()), entryTo: whenText(plusMin(LESSON_MINUTES)),
-              submit: 'Y', submitFrom: whenText(new Date()), submitTo: whenText(plusMin(SUBMIT_MINUTES)) };
+    patch = { entryMin: LESSON_MINUTES, submitMin: SUBMIT_MINUTES };
     msg = `${cls} 수업 ${LESSON_MINUTES}분 · 제출 ${SUBMIT_MINUTES}분을 함께 열었습니다`;
   } else return;
 
