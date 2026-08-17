@@ -95,6 +95,9 @@
         30분이 지나면 자동으로 제출됩니다. 학습 시간에는 쓰지 마세요.
       </div>
 
+      <!-- 항상 보이는 요약. 지금 어느 반이 열려 있는지 한 줄로. -->
+      <div class="summary" id="quickSummary">상태를 불러오는 중…</div>
+
       <div class="card">
         <h2>수업 중 조작</h2>
         <p class="muted">지금 수업하는 학급 줄에서 단추 하나만 누르면 됩니다.
@@ -112,6 +115,11 @@
           <button class="btn" id="btnReloadCfg">상태 새로 고침</button>
           <button class="btn danger" id="btnCloseAll">모든 학급 수업 종료</button>
         </div>
+
+        <!-- 사라지지 않는 조작 기록. 알림 띠를 놓쳐도 여기 남습니다. -->
+        <h3 style="margin:18px 0 6px">조작 기록 <span class="dim" style="font-weight:400;
+          font-size:.82rem">— 최근 10개. 새로고침하면 지워집니다</span></h3>
+        <div class="oplog" id="opLog"><div class="op none">아직 누른 단추가 없습니다.</div></div>
       </div>
 
       <details class="card">

@@ -3,7 +3,7 @@
  *  버전: teacher v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const TEACHER_VERSION = 'teacher v1.6.0 (2026-08-17) 토글단추';
+const TEACHER_VERSION = 'teacher v1.7.0 (2026-08-17) 요약+조작기록';
 console.log('%c' + TEACHER_VERSION, 'background:#F5A524;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -187,6 +187,40 @@ function renderQuick() {
 
   $$('#quickTable [data-a]').forEach(b =>
     b.addEventListener('click', () => quick(b.closest('tr').dataset.c, b.dataset.a)));
+
+  renderSummary();
+}
+
+/** 지금 어느 반이 열려 있는지 한 줄로. 화면 위쪽에 늘 떠 있습니다. */
+function renderSummary() {
+  const lesson = [], submit = [], exam = [];
+  CLASS_LIST.forEach(c => {
+    const st = (T.states && T.states[c]) || null;
+    if (!st) return;
+    if (st.exam && st.entry.open) { exam.push(c); return; }
+    if (st.entry.open)  lesson.push(c);
+    if (st.submit.open) submit.push(c);
+  });
+  const box = (lab, arr, kind) =>
+    `<span class="sum-item ${arr.length ? kind : 'none'}">
+       <b>${lab}</b> ${arr.length ? arr.join(', ') : '없음'}</span>`;
+
+  $('#quickSummary').innerHTML =
+    box('수업 열림', lesson, 'lesson') +
+    box('제출 열림', submit, 'submit') +
+    box('수행평가', exam, 'exam') +
+    `<span class="sum-time">${fmtDT(new Date()).slice(11)} 기준</span>`;
+}
+
+/* ---------- 사라지지 않는 조작 기록 ---------- */
+const OPS = [];
+function logOp(text, kind) {
+  OPS.unshift({ t: fmtDT(new Date()).slice(11), text: text, kind: kind || '' });
+  if (OPS.length > 10) OPS.pop();
+  const el = $('#opLog');
+  if (!el) return;
+  el.innerHTML = OPS.map(o =>
+    `<div class="op ${o.kind}"><span class="op-t">${o.t}</span>${esc(o.text)}</div>`).join('');
 }
 
 /** 단추를 누른 즉시 화면부터 바꿉니다. 서버 응답은 그 뒤에 맞춰 넣습니다.
@@ -264,12 +298,27 @@ async function quick(cls, what) {
 
   const res = await apiPost('teacherSetConfig', { idToken: Auth.idToken, cls, patch });
   if (res && res.ok) {
-    toast(msg, 'ok', 4000);
     T.cfg = res.config || T.cfg;
     T.states = res.states || T.states;
     renderQuick(); renderConfig();
+
+    /* 서버가 정말로 그렇게 바꿨는지 확인해서 기록에 남깁니다.
+       "눌렀는데 안 바뀐" 경우를 놓치지 않기 위해서입니다. */
+    const now = (T.states && T.states[cls]) || null;
+    const wantOpen = ['lesson', 'both', 'exam', 'subOpen'].indexOf(what) >= 0;
+    const gotOpen = !!(now && (what === 'subOpen' ? now.submit.open : now.entry.open));
+    if (wantOpen && !gotOpen) {
+      const why = now ? (now.entry.reason || now.submit.reason || '') : '응답 없음';
+      logOp(`${msg} … 그런데 서버는 아직 닫힘 (${why})`, 'warn');
+      toast(`${cls} 이 열리지 않았습니다 (${why}) — 조작 기록을 보세요`, 'warn', 8000);
+    } else {
+      logOp(msg, 'ok');
+      toast(msg, 'ok', 4000);
+    }
   } else {
-    toast(errText(res), 'bad', 6000);
+    const t = errText(res);
+    logOp(`${cls} 실패 — ${t}`, 'bad');
+    toast(t, 'bad', 8000);
     loadConfig(true);             // 실패했으면 서버 상태로 되돌립니다
   }
 }
