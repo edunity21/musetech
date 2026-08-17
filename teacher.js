@@ -3,7 +3,7 @@
  *  버전: teacher v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const TEACHER_VERSION = 'teacher v1.5.0 (2026-08-17) 서버시각+단추색';
+const TEACHER_VERSION = 'teacher v1.6.0 (2026-08-17) 토글단추';
 console.log('%c' + TEACHER_VERSION, 'background:#F5A524;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -143,55 +143,71 @@ function renderQuick() {
   $('#quickTable tbody').innerHTML = CLASS_LIST.map(c => {
     const st = (T.states && T.states[c]) || null;
     const e = st ? st.entry : null;
-    const s = st ? st.submit : null;
+    const sub = st ? st.submit : null;
 
-    const isExam = !!(st && st.exam);
+    const isExam   = !!(st && st.exam);
+    const lessonOn = !!(e && e.open);
+    const subOn    = !!(sub && sub.open);
 
-    let badge = '<span class="badge none">닫힘</span>';
-    if (isExam && e && e.open) {
-      badge = '<span class="badge exam">수행평가 중</span>';
-    } else if (e && e.open) {
-      badge = '<span class="badge done">수업 중</span>';
-      if (s && s.open) badge += ' <span class="badge draft">제출 열림</span>';
-    } else if (e && e.reason === 'ENTRY_BEFORE') {
-      badge = '<span class="badge draft">시작 대기</span>';
-    } else if (e && e.reason === 'ENTRY_AFTER') {
-      badge = '<span class="badge none">종료됨</span>';
+    /* ---- 지금 상태를 낱말로 ---- */
+    let chips = '';
+    if (isExam && lessonOn) {
+      chips = '<span class="chip exam">● 수행평가 중</span>';
+    } else {
+      chips = lessonOn
+        ? '<span class="chip on-lesson">● 수업 열림</span>'
+        : '<span class="chip off">○ 수업 닫힘</span>';
+      chips += subOn
+        ? '<span class="chip on-submit">● 제출 열림</span>'
+        : '<span class="chip off">○ 제출 닫힘</span>';
     }
+    if (e && e.reason === 'ENTRY_BEFORE') chips = '<span class="chip wait">◐ 시작 대기</span>';
+    if (e && e.reason === 'ENTRY_AFTER')  chips = '<span class="chip off">○ 시간 끝남</span>';
 
     let until = '';
-    if (e && e.open && e.to) until = `<div class="dim" style="font-size:.78rem">종료 ${esc(fmtDT(e.to).slice(11))}</div>`;
-    if (s && s.open && s.to) until += `<div class="dim" style="font-size:.78rem">제출 마감 ${esc(fmtDT(s.to).slice(11))}</div>`;
+    if (lessonOn && e.to)  until += `<div class="until">수업 종료 ${esc(fmtDT(e.to).slice(11))}</div>`;
+    if (subOn && sub.to)   until += `<div class="until">제출 마감 ${esc(fmtDT(sub.to).slice(11))}</div>`;
 
-    /* 지금 켜져 있는 것은 채운 색으로, 꺼져 있는 것은 테두리만으로 보여 줍니다.
-       한눈에 "지금 무엇이 열려 있는지" 알 수 있게 하기 위함입니다. */
-    const lessonOn = !!(e && e.open) && !isExam;
-    const subOn    = !!(s && s.open) && !isExam;
-    const bothOn   = lessonOn && subOn;
+    /* ---- 좌우 토글 : 켜진 쪽이 밝게 채워집니다 ---- */
+    const seg = (kind, onNow, aOn, aOff, labOn, labOff) => `
+      <div class="seg seg-${kind} ${onNow ? 'is-on' : 'is-off'}">
+        <button class="seg-b b-on"  data-a="${aOn}">${labOn}</button>
+        <button class="seg-b b-off" data-a="${aOff}">${labOff}</button>
+      </div>`;
 
     return `<tr data-c="${c}" class="${isExam ? 'row-exam' : (lessonOn ? 'row-on' : '')}">
-      <td><b>${c}</b></td>
-      <td>${badge}${until}</td>
-      <td class="num">
-        <button class="btn sm act act-lesson ${lessonOn ? 'on' : ''}" data-a="lesson">
-          ${lessonOn ? '✓ 수업 중' : '수업 시작'}</button>
-        <button class="btn sm act-off ${lessonOn || isExam ? '' : 'dim'}" data-a="lessonEnd">수업 종료</button></td>
-      <td class="num">
-        <button class="btn sm act act-submit ${subOn ? 'on' : ''}" data-a="subOpen">
-          ${subOn ? '✓ 제출 열림' : '제출 열기'}</button>
-        <button class="btn sm act-off ${subOn ? '' : 'dim'}" data-a="subShut">제출 닫기</button></td>
-      <td class="num">
-        <button class="btn sm act act-both ${bothOn ? 'on' : ''}" data-a="both">
-          ${bothOn ? '✓ 둘 다 열림' : '수업+제출 함께'}</button></td>
-      <td class="num">
-        <button class="btn sm act act-exam ${isExam ? 'on' : ''}" data-a="exam">
-          ${isExam ? '✓ 평가 중' : '평가 시작'}</button>
-        <button class="btn sm act-off ${isExam ? '' : 'dim'}" data-a="examEnd">평가 종료</button></td>
+      <td class="cls"><b>${c}</b></td>
+      <td class="stat">${chips}${until}</td>
+      <td>${seg('lesson', lessonOn && !isExam, 'lesson',  'lessonEnd', '수업 열기', '닫기')}</td>
+      <td>${seg('submit', subOn && !isExam,    'subOpen', 'subShut',   '제출 열기', '닫기')}</td>
+      <td>${seg('exam',   isExam,              'exam',    'examEnd',   '평가 시작', '종료')}</td>
+      <td class="num"><button class="btn sm both-b" data-a="both">수업+제출<br>함께 열기</button></td>
     </tr>`;
   }).join('');
 
   $$('#quickTable [data-a]').forEach(b =>
     b.addEventListener('click', () => quick(b.closest('tr').dataset.c, b.dataset.a)));
+}
+
+/** 단추를 누른 즉시 화면부터 바꿉니다. 서버 응답은 그 뒤에 맞춰 넣습니다.
+    (누른 것 같은데 아무 반응이 없어 두 번 누르는 일을 막습니다) */
+function optimistic(cls, what) {
+  if (!T.states) T.states = {};
+  const st = T.states[cls] || { entry: {}, submit: {}, exam: false };
+  const mk = (open) => ({ open: open, reason: open ? '' : 'CLOSED', to: st.entry && st.entry.to });
+
+  if (what === 'lesson')         { st.entry = mk(true);  st.exam = false; }
+  else if (what === 'lessonEnd') { st.entry = mk(false); st.submit = mk(false); st.exam = false; }
+  else if (what === 'subOpen')   { st.submit = mk(true); }
+  else if (what === 'subShut')   { st.submit = mk(false); }
+  else if (what === 'both')      { st.entry = mk(true); st.submit = mk(true); st.exam = false; }
+  else if (what === 'exam')      { st.entry = mk(true); st.submit = mk(true); st.exam = true; }
+  else if (what === 'examEnd')   { st.entry = mk(false); st.submit = mk(false); st.exam = false; }
+
+  T.states[cls] = st;
+  renderQuick();
+  const tr = $(`#quickTable tr[data-c="${cls}"]`);
+  if (tr) tr.classList.add('busy');
 }
 
 /** 빠른 조작 한 번 = 설정 한 줄 고치기 */
@@ -244,13 +260,18 @@ async function quick(cls, what) {
     msg = `${cls} 수업 ${LESSON_MINUTES}분 · 제출 ${SUBMIT_MINUTES}분을 함께 열었습니다`;
   } else return;
 
+  optimistic(cls, what);          // 먼저 화면부터 바꿉니다
+
   const res = await apiPost('teacherSetConfig', { idToken: Auth.idToken, cls, patch });
   if (res && res.ok) {
     toast(msg, 'ok', 4000);
     T.cfg = res.config || T.cfg;
     T.states = res.states || T.states;
     renderQuick(); renderConfig();
-  } else toast(errText(res), 'bad');
+  } else {
+    toast(errText(res), 'bad', 6000);
+    loadConfig(true);             // 실패했으면 서버 상태로 되돌립니다
+  }
 }
 
 $('#btnReloadCfg').addEventListener('click', () => loadConfig());

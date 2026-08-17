@@ -729,55 +729,76 @@ body.exam .nowbar { border-top-color: #A3122A; }
 }
 
 /* ---------------------------------------------------------------------------
- *  18. 수업 통제 단추 — 켜짐/꺼짐이 한눈에 보이게 (2026-08-17)
+ *  18. 수업 통제 — 좌우 토글 (2026-08-17)
  *
- *  · 꺼져 있으면 테두리만 (그 색으로 물들 수 있다는 뜻)
- *  · 켜져 있으면 그 색으로 꽉 채움 + ✓
+ *  단추 두 개가 한 덩어리로 붙어 있고, 지금 켜진 쪽만 밝게 채워집니다.
+ *  그래서 "어느 반이 열려 있는지"를 눈으로 훑기만 해도 알 수 있습니다.
  * -------------------------------------------------------------------------*/
 
-.btn.act {
-  background: transparent; font-weight: 700;
-  border-width: 2px; min-width: 104px;
-  transition: background var(--fast), color var(--fast), border-color var(--fast);
+.seg {
+  display: inline-flex; border-radius: 999px; overflow: hidden;
+  border: 2px solid #3A3A3A; background: #1A1A1A; min-width: 168px;
 }
-.btn.act.on { color: #0B0B0B; border-color: transparent; }
-
-/* 수업 = 초록 */
-.act-lesson       { color: #55D98A; border-color: #2C6B45; }
-.act-lesson:hover { background: rgba(29, 185, 84, .14); }
-.act-lesson.on    { background: #1DB954; }
-.act-lesson.on:hover { background: #22CE62; }
-
-/* 제출 = 노랑 */
-.act-submit       { color: #F5C518; border-color: #6E5A12; }
-.act-submit:hover { background: rgba(245, 197, 24, .14); }
-.act-submit.on    { background: #F5C518; }
-.act-submit.on:hover { background: #FFD634; }
-
-/* 둘 다 = 파랑 */
-.act-both       { color: #78B8F5; border-color: #2A4E75; }
-.act-both:hover { background: rgba(120, 184, 245, .14); }
-.act-both.on    { background: #5BA7F0; }
-.act-both.on:hover { background: #74B6F5; }
-
-/* 수행평가 = 빨강 */
-.act-exam       { color: #FF8195; border-color: #7A2632; }
-.act-exam:hover { background: rgba(226, 61, 90, .14); }
-.act-exam.on    { background: #E23D5A; color: #fff; }
-.act-exam.on:hover { background: #F04E6B; }
-
-/* 닫기 계열은 조용하게. 닫을 게 없으면 더 흐리게. */
-.btn.act-off {
-  background: transparent; border-color: var(--line); color: var(--muted);
+.seg-b {
+  flex: 1; min-height: 42px; padding: 8px 12px;
+  background: transparent; border: 0; color: #8A8A8A;
+  font: inherit; font-size: .86rem; font-weight: 800; white-space: nowrap;
+  cursor: pointer; transition: background .12s, color .12s;
 }
-.btn.act-off:hover { background: #2A2A2A; color: var(--text); }
-.btn.act-off.dim   { opacity: .38; }
+.seg-b:hover  { background: rgba(255, 255, 255, .07); color: #DDD; }
+.seg-b:active { transform: scale(.97); }
+.seg .b-off   { flex: 0 0 62px; border-left: 2px solid #3A3A3A; }
 
-/* 열려 있는 학급 줄은 왼쪽에 색 띠를 둡니다. */
-#quickTable tbody tr.row-on  td:first-child { box-shadow: inset 3px 0 0 #1DB954; }
-#quickTable tbody tr.row-exam td:first-child { box-shadow: inset 3px 0 0 #E23D5A; }
-#quickTable tbody tr.row-exam { background: rgba(226, 61, 90, .06); }
+/* ── 켜진 쪽만 밝게 ── */
+.seg.is-on  .b-on  { color: #0A0A0A; }
+.seg.is-off .b-off { color: #0A0A0A; background: #8E8E8E; }
+.seg.is-off .b-off:hover { background: #A5A5A5; }
 
-/* 단추가 두 개씩 들어가는 칸은 줄바꿈을 허용합니다. */
-#quickTable td.num { white-space: normal; }
-#quickTable td.num .btn { margin: 2px 3px; }
+.seg-lesson.is-on { border-color: #1DB954; }
+.seg-lesson.is-on .b-on { background: #22D964; }
+.seg-lesson.is-on .b-on:hover { background: #35EE78; }
+
+.seg-submit.is-on { border-color: #F5C518; }
+.seg-submit.is-on .b-on { background: #FFD84A; }
+.seg-submit.is-on .b-on:hover { background: #FFE470; }
+
+.seg-exam.is-on { border-color: #FF4D6A; }
+.seg-exam.is-on .b-on { background: #FF5C78; color: #fff; }
+.seg-exam.is-on .b-on:hover { background: #FF7389; }
+
+/* 꺼져 있을 때 "열기" 쪽에 그 색의 힌트를 남깁니다 */
+.seg-lesson.is-off .b-on { color: #4ED88B; }
+.seg-submit.is-off .b-on { color: #FFD84A; }
+.seg-exam.is-off   .b-on { color: #FF8195; }
+
+/* ── 상태 낱말 ── */
+.chip {
+  display: inline-block; margin: 2px 6px 2px 0; padding: 4px 12px;
+  border-radius: 999px; font-size: .84rem; font-weight: 800; white-space: nowrap;
+}
+.chip.off        { background: #2A2A2A; color: #8A8A8A; }
+.chip.wait       { background: #6B5312; color: #FFE07A; }
+.chip.on-lesson  { background: #22D964; color: #06210F; }
+.chip.on-submit  { background: #FFD84A; color: #2A2000; }
+.chip.exam       { background: #FF5C78; color: #fff; }
+.until { font-size: .76rem; color: var(--muted); margin-top: 3px; }
+
+/* ── 학급 줄 ── */
+#quickTable td { vertical-align: middle; padding: 10px 8px; }
+#quickTable td.cls { font-size: 1.05rem; }
+#quickTable tbody tr.row-on  td.cls { box-shadow: inset 4px 0 0 #22D964; }
+#quickTable tbody tr.row-exam td.cls { box-shadow: inset 4px 0 0 #FF5C78; }
+#quickTable tbody tr.row-on   { background: rgba(34, 217, 100, .05); }
+#quickTable tbody tr.row-exam { background: rgba(255, 92, 120, .07); }
+#quickTable tbody tr.busy { opacity: .6; }
+
+.both-b { min-height: 42px; line-height: 1.25; }
+
+@media (max-width: 700px) {
+  .seg { min-width: 148px; }
+  .seg-b { font-size: .8rem; padding: 8px 8px; }
+  .seg .b-off { flex: 0 0 52px; }
+}
+
+/* 인쇄에서는 단추를 숨깁니다. */
+@media print { .seg, .both-b { display: none !important; } }
