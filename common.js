@@ -1,9 +1,9 @@
 /* ============================================================================
  *  common.js — 학생 화면과 교사 화면이 함께 쓰는 도구 모음
- *  버전: common v1.0.0 (2026-08-17)
+ *  버전: common v1.1.0 (2026-08-17)
  * ==========================================================================*/
 
-const COMMON_VERSION = 'common v1.0.0 (2026-08-17)';
+const COMMON_VERSION = 'common v1.1.0 (2026-08-17) 로그인단추수정';
 
 /* ---------------------------------------------------------------------------
  *  1. 짧은 도우미
@@ -194,15 +194,14 @@ const Auth = {
       });
     };
     /* 구글 스크립트가 준비될 때까지 0.2초 간격으로 최대 10초 기다립니다.
-       이벤트만 기다리면 놓치는 경우가 있어 직접 확인합니다. */
+       'gsi-ready' 이벤트만 기다리면 스크립트가 먼저 도착했을 때 놓치는 일이
+       있어서, 직접 확인하는 방식으로 두었습니다. */
     let tries = 0;
-    const wait = setInterval(() => {
+    const wait = setInterval(function () {
       if (window.google && google.accounts && google.accounts.id) {
-        clearInterval(wait);
-        start();
+        clearInterval(wait); start();
       } else if (++tries > 50) {
-        clearInterval(wait);
-        start();   // 10초 뒤에도 없으면 안내 문구를 띄웁니다
+        clearInterval(wait); start();   // 10초가 지나면 안내 문구를 띄웁니다
       }
     }, 200);
   },
@@ -260,6 +259,7 @@ const ERR_TEXT = {
   ACCOUNT_MISMATCH:  '이 학번은 다른 계정에 이미 연결되어 있습니다. 선생님께 말씀해 주세요.',
   DUPLICATE_ACCOUNT: '이 계정은 다른 학번으로 이미 들어왔습니다. 선생님께 말씀해 주세요.',
   NOT_TEACHER:       '교사 계정이 아닙니다.',
+  WRONG_TEACHER_PW:  '수업자용 비밀번호가 맞지 않습니다.',
   ENTRY_CLOSED:      '아직 수업이 열리지 않았습니다. 선생님이 열어 주실 때까지 기다려 주세요.',
   ENTRY_BEFORE:      '입장 시간이 아직 되지 않았습니다.',
   ENTRY_AFTER:       '수업 시간이 끝났습니다. 다음 시간에 이어서 하세요.',

@@ -3,7 +3,7 @@
  *  버전: teacher v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const TEACHER_VERSION = 'teacher v1.1.0 (2026-08-17) 입장통제';
+const TEACHER_VERSION = 'teacher v1.2.0 (2026-08-17) 비번+학습자료';
 console.log('%c' + TEACHER_VERSION, 'background:#F5A524;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -24,22 +24,54 @@ $('#verLine').textContent = TEACHER_VERSION;
  *  1. 로그인 · 자동 로그아웃
  * ========================================================================= */
 
-Auth.render($('#gsiBtn'), async (p) => {
-  $('#gateMsg').textContent = '확인하는 중…';
-  const res = await apiPost('teacherHello', { idToken: Auth.idToken });
-  if (!res || !res.ok) {
-    $('#gateMsg').innerHTML = `<span class="err">${esc(errText(res))}</span>`;
-    Auth.signOut();
+/* 1단계 · 구글 로그인이 끝나면 2단계(비밀번호) 칸을 엽니다. */
+Auth.render($('#gsiBtn'), (p) => {
+  $('#gateMsg').innerHTML = `<span class="dim"><b>${esc(p.email)}</b> 로 로그인했습니다.</span>`;
+  $('#step2').classList.remove('off');
+  $('#inTpw').focus();
+});
+
+/* 2단계 · 수업자용 비밀번호 */
+$('#btnTEnter').addEventListener('click', doTeacherEnter);
+$('#inTpw').addEventListener('keydown', e => { if (e.key === 'Enter') doTeacherEnter(); });
+
+async function doTeacherEnter() {
+  const pw = $('#inTpw').value;
+  if (!Auth.alive()) {
+    $('#gateMsg').innerHTML = '<span class="err">먼저 구글 로그인을 해 주세요.</span>';
     return;
   }
+  if (!pw) {
+    $('#gateMsg').innerHTML = '<span class="err">비밀번호를 적어 주세요.</span>';
+    return;
+  }
+
+  const btn = $('#btnTEnter');
+  btn.disabled = true; btn.textContent = '확인하는 중…';
+  $('#gateMsg').textContent = '';
+
+  const res = await apiPost('teacherHello', { idToken: Auth.idToken, pw });
+
+  btn.disabled = false; btn.textContent = '들어가기';
+
+  if (!res || !res.ok) {
+    $('#gateMsg').innerHTML = `<span class="err">${esc(errText(res))}</span>`;
+    $('#inTpw').value = '';
+    $('#inTpw').focus();
+    /* 비밀번호만 틀린 것이면 구글 로그인은 그대로 두어, 다시 치기만 하면 되게 합니다. */
+    if (res && res.error !== 'WRONG_TEACHER_PW') Auth.signOut();
+    return;
+  }
+
   T.email = Auth.email;
+  $('#inTpw').value = '';
   $('#gateMsg').textContent = '';
   $('#gate').classList.add('hidden');
   $('#app').classList.remove('hidden');
   $('#whoBox').innerHTML = esc(T.email);
   $('#serverLine').textContent = `서버 ${res.version} · 시트 연결됨`;
   boot();
-});
+}
 
 /* 20분 동안 아무 조작이 없으면 로그아웃합니다. */
 ['click', 'keydown', 'touchstart', 'mousemove'].forEach(ev =>
@@ -61,9 +93,11 @@ setInterval(() => {
 $$('.tab').forEach(t => t.addEventListener('click', () => {
   const name = t.dataset.tab;
   $$('.tab').forEach(x => x.setAttribute('aria-selected', String(x === t)));
-  ['control', 'status', 'roster', 'log'].forEach(n => $('#panel-' + n).hidden = (n !== name));
+  ['control', 'status', 'roster', 'learn', 'log'].forEach(n => $('#panel-' + n).hidden = (n !== name));
+  window.scrollTo({ top: 0, behavior: 'auto' });
   if (name === 'status') loadStatus();
   if (name === 'roster') loadRoster();
+  if (name === 'learn') renderLearn();
 }));
 
 function boot() {
@@ -495,4 +529,169 @@ $('#btnLogLoad').addEventListener('click', async () => {
     <td class="dim">${esc(r[5])}</td>
   </tr>`).join('') || '<tr><td colspan="6" class="dim">기록이 없습니다.</td></tr>';
   toast(`${(res.rows || []).length}줄`, 'ok');
+});
+
+
+/* ===========================================================================
+ *  8. 학습 자료 — 학생 화면의 [산업 둘러보기] 와 같은 내용입니다.
+ *     수업 중 교실 화면에 띄워 함께 보기 위한 탭입니다.
+ *     학생 화면과 달리 '분야 정하기' 단추는 없습니다. (교사는 고를 일이 없으므로)
+ * ========================================================================= */
+
+/** 앨범 표지 색. app.js 와 같은 값입니다. */
+const T_ART = [
+  ['#1DB954', '#0E6B32'], ['#E8734A', '#8A3418'], ['#5B7CFA', '#26307A'],
+  ['#F2C14E', '#8A6416'], ['#48C9B0', '#166352'], ['#B96BD8', '#5B2478'],
+  ['#4FA8E8', '#144E7A'], ['#D2795E', '#78331F'], ['#8BC34A', '#3F6318'],
+  ['#F06292', '#8A2247'], ['#A0A8B4', '#4A5058'], ['#00C2C7', '#00595C']
+];
+const tArtStyle = i => `background:linear-gradient(150deg,${T_ART[i % 12][0]},${T_ART[i % 12][1]})`;
+
+let tSearch = '';
+let tLearnReady = false;
+
+function renderLearn() {
+  if (!tLearnReady) {
+    $('#tSearchBox').addEventListener('input', e => {
+      tSearch = e.target.value.trim().toLowerCase();
+      tRenderAlbums(); tRenderJobs();
+    });
+    tLearnReady = true;
+  }
+  tRenderAlbums();
+  tRenderJobs();
+}
+
+function tMatch(ind) {
+  if (!tSearch) return true;
+  const hay = [ind.name, ind.en, ind.one,
+    ind.jobs.map(j => j.join(' ')).join(' '),
+    (ind.terms || []).map(t => t.join(' ')).join(' '),
+    (ind.search || []).join(' ')].join(' ').toLowerCase();
+  return hay.includes(tSearch);
+}
+
+function tRenderAlbums() {
+  const list = INDUSTRIES.filter(tMatch);
+  $('#tBrowseCount').textContent = `${list.length}개 분야 보임 (전체 ${INDUSTRIES.length}개)`;
+
+  $('#tAlbumGrid').innerHTML = list.map(ind => {
+    const i = INDUSTRIES.indexOf(ind);
+    return `
+    <button class="album" data-n="${ind.n}">
+      <div class="art" style="${tArtStyle(i)}">
+        <span class="num">${ind.n}</span>
+        <span class="en">${esc(ind.en)}</span>
+        <span class="play" aria-hidden="true">▶</span>
+      </div>
+      <div class="nm">${esc(ind.name)}</div>
+      <div class="ln">${esc(ind.one)}</div>
+    </button>`;
+  }).join('') || '<p class="dim">찾는 낱말이 들어간 분야가 없습니다.</p>';
+
+  $$('#tAlbumGrid .album').forEach(a =>
+    a.addEventListener('click', () => tOpenDetail(a.dataset.n)));
+}
+
+function tRenderJobs() {
+  const rows = [];
+  INDUSTRIES.forEach(ind => {
+    ind.jobs.forEach(j => {
+      const hay = (j.join(' ') + ' ' + ind.name).toLowerCase();
+      if (tSearch && !hay.includes(tSearch)) return;
+      rows.push(`
+        <div class="track" role="button" tabindex="0" data-n="${ind.n}">
+          <div class="i">${ind.n}</div>
+          <div>
+            <div class="jn">${esc(j[0])}</div>
+            <div class="jd">${esc(j[1])}</div>
+            <div class="js">필요한 역량 · ${esc(j[2])}</div>
+            <div class="dim" style="font-size:.8rem">${esc(ind.name)}</div>
+          </div>
+        </div>`);
+    });
+  });
+  $('#tJobList').innerHTML = rows.join('') || '<p class="dim">찾는 낱말이 들어간 직업이 없습니다.</p>';
+  $$('#tJobList .track').forEach(t => {
+    const go = () => tOpenDetail(t.dataset.n);
+    t.addEventListener('click', go);
+    t.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+    });
+  });
+}
+
+function tOpenDetail(n) {
+  const i = INDUSTRIES.findIndex(x => x.n === n);
+  if (i < 0) return;
+  const d = INDUSTRIES[i];
+  const majors = (typeof MAJORS !== 'undefined' && MAJORS[n]) ? MAJORS[n] : null;
+
+  $('#tDetail').innerHTML = `
+    <div class="banner" style="${tArtStyle(i)}">
+      <button class="back" id="tBtnBack" aria-label="닫기">✕</button>
+      <div class="kicker">분야 ${d.n} · ${esc(d.en)}</div>
+      <h2>${esc(d.name)}</h2>
+      <p class="one">${esc(d.one)}</p>
+    </div>
+
+    <div class="detail-body">
+      <div class="detail-actions">
+        <button class="btn ghost" id="tBtnClose2">닫기</button>
+      </div>
+
+      <div class="sec"><h3>무슨 일을 하나요</h3>
+        ${d.what.map(p => `<p>${esc(p)}</p>`).join('')}</div>
+
+      <div class="sec"><h3>일이 흘러가는 순서</h3>
+        <ol class="flow">${d.flow.map(f => `<li>${esc(f)}</li>`).join('')}</ol></div>
+
+      <div class="sec"><h3>이 분야의 직업들 · 하는 일 · 필요한 역량</h3>
+        <div class="tracks">${d.jobs.map((j, k) => `
+          <div class="track">
+            <div class="i">${pad2(k + 1)}</div>
+            <div>
+              <div class="jn">${esc(j[0])}</div>
+              <div class="jd">${esc(j[1])}</div>
+              <div class="js">필요한 역량 · ${esc(j[2])}</div>
+            </div>
+          </div>`).join('')}</div></div>
+
+      ${majors ? `<div class="sec"><h3>관련 학과</h3>
+        <div class="taglist">${majors.map(m => `<span class="tag">${esc(m)}</span>`).join('')}</div>
+        <p class="dim" style="margin-top:8px">참고용입니다. 이 학과만 갈 수 있다는 뜻은 아닙니다.</p></div>` : ''}
+
+      <div class="sec"><h3>음악이 만드는 값어치 · 활동지 7번 대비</h3>
+        ${d.value.map(p => `<p>${esc(p)}</p>`).join('')}</div>
+
+      <div class="sec"><h3>우리나라에서는</h3>
+        <ul class="think">${d.korea.map(k => `<li>${esc(k)}</li>`).join('')}</ul></div>
+
+      <div class="sec"><h3>이런 말을 알아두면</h3>
+        <div class="terms">${d.terms.map(t =>
+          `<div class="term"><b>${esc(t[0])}</b> — <span>${esc(t[1])}</span></div>`).join('')}</div></div>
+
+      <div class="sec"><h3>찾아볼 검색어</h3>
+        <div class="taglist">${d.search.map(s => `<span class="tag">${esc(s)}</span>`).join('')}</div></div>
+
+      <div class="sec"><h3>생각해 볼 질문</h3>
+        <ul class="think">${d.think.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
+        <p class="dim" style="margin-top:8px">학생에게 던질 발문으로 쓰기 좋습니다.</p></div>
+    </div>`;
+
+  $('#tDetail').hidden = false;
+  $('#tDetail').scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+
+  $('#tBtnBack').addEventListener('click', tCloseDetail);
+  $('#tBtnClose2').addEventListener('click', tCloseDetail);
+}
+
+function tCloseDetail() {
+  $('#tDetail').hidden = true;
+  document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$('#tDetail').hidden) tCloseDetail();
 });
