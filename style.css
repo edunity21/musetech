@@ -844,3 +844,25 @@ body.exam .nowbar { border-top-color: #A3122A; }
   .sum-time { margin-left: 0; width: 100%; }
 }
 @media print { .summary, .oplog { display: none !important; } }
+
+/* ---------------------------------------------------------------------------
+ *  20. 본인 확인 카드 (학생 로그인) — 2026-08-18
+ *      명렬표에서 나를 찾았을 때, 학번을 치지 않고 이 카드로 확인만 합니다.
+ * -------------------------------------------------------------------------*/
+
+.mecard {
+  background: var(--card-2); border: 1px solid var(--line);
+  border-radius: 14px; padding: 16px 18px; text-align: center;
+}
+.me-name { font-size: 1.5rem; font-weight: 800; letter-spacing: -.01em; }
+.me-sub  { margin-top: 4px; color: var(--muted); font-size: .95rem; }
+.me-ok {
+  margin-top: 10px; padding: 6px 12px; border-radius: 999px; display: inline-block;
+  background: rgba(29, 185, 84, .16); color: #55D98A; font-weight: 700; font-size: .88rem;
+}
+.me-no {
+  margin-top: 10px; padding: 6px 12px; border-radius: 999px; display: inline-block;
+  background: rgba(255, 92, 120, .14); color: #FF9AAB; font-weight: 700; font-size: .88rem;
+}
+#lnkManual { color: var(--muted); text-decoration: underline; }
+#lnkManual:hover { color: var(--text); }

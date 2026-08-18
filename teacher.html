@@ -197,10 +197,18 @@
     <section class="panel" id="panel-roster" role="tabpanel" hidden>
       <div class="card">
         <h2>명렬표 한 번에 넣기</h2>
-        <p class="muted">엑셀에서 <b>학번 / 이름 / 비밀번호</b> 세 칸을 복사해 아래에 붙여 넣으세요.
-          쉼표나 탭 어느 쪽이든 됩니다. 이미 있는 학번은 이름과 비밀번호만 바뀝니다.</p>
-        <textarea class="t-input" id="rosterPaste" placeholder="3301	홍길동	a1b2c3
-3302	김철수	d4e5f6"></textarea>
+        <p class="muted">두 가지 모양을 알아봅니다. 쉼표·탭 어느 쪽이든 됩니다.</p>
+        <ul class="think" style="margin:8px 0 12px">
+          <li><b>계정 관리 엑셀을 통째로</b> — <code>NO / 소속명 / 학년 / 반 / 번호 / 이름 / 아이디 …</code><br>
+            <span class="dim">학년·반·번호로 학번을 만들고, <b>아이디를 [연결된계정]에 미리 넣습니다.</b>
+            그러면 학생은 자기 계정으로만 자기 학번에 들어올 수 있고,
+            로그인하면 학번·이름이 저절로 채워집니다.</span></li>
+          <li><b>학번 / 이름 / 비밀번호</b> 세 칸 — 예전 방식<br>
+            <span class="dim">비밀번호 칸을 비우면 공통 비밀번호를 씁니다.</span></li>
+        </ul>
+        <p class="muted">머리글 줄은 알아서 건너뜁니다. 이미 있는 학번은 덮어씁니다.</p>
+        <textarea class="t-input" id="rosterPaste" placeholder="1	순천승평중학교	3	9	1	권선우	gwon123@ai.jne.kr	2026-03-02	사용
+2	순천승평중학교	3	9	2	김민서	kim.ms@ai.jne.kr	2026-03-02	사용"></textarea>
         <div class="btnrow" style="margin-top:10px">
           <button class="btn primary" id="btnRosterSave">명렬표에 넣기</button>
           <button class="btn" id="btnRosterLoad">지금 명렬표 보기</button>

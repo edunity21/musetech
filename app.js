@@ -3,7 +3,7 @@
  *  버전: student v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const APP_VERSION = 'student v1.3.0 (2026-08-17) 평가모드';
+const APP_VERSION = 'student v1.4.0 (2026-08-18) 계정자동인식';
 console.log('%c' + APP_VERSION, 'background:#1DB954;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -44,11 +44,82 @@ const serverNow = () => Date.now() + S.clockOffset;
 
 $('#verLine').textContent = APP_VERSION;
 
-Auth.render($('#gsiBtn'), (p) => {
+/* 구글 로그인이 끝나면, 그 계정이 명렬표에 있는지 서버에 물어봅니다.
+   있으면 학번·이름을 대신 채워 주므로 학생은 비밀번호만 넣으면 됩니다.
+   태블릿에서 네 자리 숫자를 잘못 눌러 남의 학번으로 들어가는 사고를 막습니다. */
+let ME = null;
+
+Auth.render($('#gsiBtn'), async (p) => {
   $('#whoLine').innerHTML = `<b>${esc(p.email)}</b> 로 로그인했습니다.`;
+  $('#gateMsg').innerHTML = '<span class="dim">명렬표에서 찾는 중…</span>';
+
+  const res = await apiPost('whoAmI', { idToken: Auth.idToken }, 12000);
+  $('#gateMsg').textContent = '';
+
+  if (res && res.ok && res.sid) {
+    ME = res;
+    showMeCard(res);
+    $('#stepMe').classList.remove('off');
+    $('#inPwMe').focus();
+  } else {
+    /* 명렬표에 없는 계정이면 예전처럼 손으로 넣습니다. (전학생 등) */
+    if (res && res.error && res.error !== 'NOT_LINKED') {
+      $('#gateMsg').innerHTML = `<span class="err">${esc(errText(res))}</span>`;
+    }
+    $('#step2').classList.remove('off');
+    $('#inSid').focus();
+  }
+});
+
+/** 「3학년 9반 1번 권선우」 카드를 그립니다. 그 반이 지금 열려 있는지도 함께. */
+function showMeCard(me) {
+  const c = me.config || {};
+  let line = '';
+  if (c.entry && c.entry.open) {
+    line = `<div class="me-ok">지금 들어올 수 있습니다` +
+           (c.entry.to ? ` · 수업 종료 ${esc(fmtDT(c.entry.to).slice(11))}` : '') + `</div>`;
+  } else if (c.entry) {
+    line = `<div class="me-no">${esc(ERR_TEXT[c.entry.reason] || '아직 들어올 수 없습니다.')}</div>`;
+  }
+  const no = String(me.sid).slice(2).replace(/^0/, '');
+  $('#meCard').innerHTML = `
+    <div class="me-name">${esc(me.name || '(이름 없음)')}</div>
+    <div class="me-sub">${esc(me.cls)} · ${esc(no)}번 · 학번 ${esc(me.sid)}</div>
+    ${line}`;
+}
+
+/* 「내가 아니라면」 — 손으로 넣는 칸으로 바꿉니다. */
+$('#lnkManual').addEventListener('click', (e) => {
+  e.preventDefault();
+  ME = null;
+  $('#stepMe').classList.add('off');
   $('#step2').classList.remove('off');
   $('#inSid').focus();
 });
+
+$('#btnEnterMe').addEventListener('click', doEnterMe);
+$('#inPwMe').addEventListener('keydown', e => { if (e.key === 'Enter') doEnterMe(); });
+
+async function doEnterMe() {
+  if (!ME) return;
+  const pw = $('#inPwMe').value;
+  const msg = $('#gateMsg');
+  if (!Auth.alive()) { msg.innerHTML = '<span class="err">먼저 구글 로그인을 해 주세요.</span>'; return; }
+  if (!pw) { msg.innerHTML = '<span class="err">비밀번호를 적어 주세요.</span>'; return; }
+
+  const btn = $('#btnEnterMe');
+  btn.disabled = true; btn.textContent = '확인하는 중…';
+  msg.textContent = '';
+
+  const res = await apiPost('gate', { idToken: Auth.idToken, sid: ME.sid, name: ME.name, pw });
+
+  btn.disabled = false; btn.textContent = '들어가기';
+  if (!res || !res.ok) {
+    msg.innerHTML = `<span class="err">${esc(errText(res))}</span>`;
+    return;
+  }
+  enterWith(ME.sid, ME.name, res);
+}
 
 $('#btnEnter').addEventListener('click', doEnter);
 ['inSid', 'inName', 'inPw'].forEach(id => {
@@ -104,6 +175,11 @@ async function doEnter() {
     return;
   }
 
+  enterWith(sid, name, res);
+}
+
+/** 입장이 허락된 뒤의 공통 처리. (자동 인식·손입력 두 경로가 함께 씁니다) */
+function enterWith(sid, name, res) {
   S.sid = sid;
   S.name = res.name || name;
   S.cls = res.cls || classOf(sid);

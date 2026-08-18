@@ -3,7 +3,7 @@
  *  버전: teacher v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const TEACHER_VERSION = 'teacher v1.7.0 (2026-08-17) 요약+조작기록';
+const TEACHER_VERSION = 'teacher v1.8.0 (2026-08-18) 계정목록붙여넣기';
 console.log('%c' + TEACHER_VERSION, 'background:#F5A524;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -580,35 +580,112 @@ async function loadRoster() {
 }
 $('#btnRosterLoad').addEventListener('click', loadRoster);
 
+/* ---------------------------------------------------------------------------
+ *  명렬표 붙여넣기
+ *
+ *  두 가지 모양을 모두 알아봅니다.
+ *   (가) 학번 / 이름 / 비밀번호            ← 예전 방식
+ *   (나) NO / 소속명 / 학년 / 반 / 번호 / 이름 / 아이디 / 가입일시 / 사용여부
+ *        ← 계정 관리 엑셀을 통째로 복사한 것. 학년·반·번호로 학번을 만듭니다.
+ *
+ *  (나) 로 넣으면 [연결된계정] 이 미리 채워져서,
+ *  학생이 남의 학번을 눌러도 그 학번으로는 들어갈 수 없게 됩니다.
+ * -------------------------------------------------------------------------*/
+
+/** 한 줄을 읽어 { sid, name, pw, email } 로 바꿉니다. 못 읽으면 null. */
+function parseRosterLine(line) {
+  const p = line.split(/\t|,/).map(x => x.trim());
+
+  /* 이메일이 들어 있는 칸을 찾습니다. */
+  let email = '', eIdx = -1;
+  for (let i = 0; i < p.length; i++) {
+    if (p[i].indexOf('@') > 0) { email = p[i].toLowerCase(); eIdx = i; break; }
+  }
+
+  /* (가) 맨 앞이 네 자리 학번인 경우 */
+  if (/^\d{4}$/.test(p[0])) {
+    return { sid: p[0], name: p[1] || '', pw: p[2] || '', email: email };
+  }
+
+  /* (나) 학년·반·번호가 나란히 오는 자리를 찾습니다.
+     머리글 줄(NO, 소속명, 학년 …)은 숫자가 아니어서 저절로 걸러집니다. */
+  const num = p.map(x => (/^\d{1,3}$/.test(x) ? Number(x) : null));
+  for (let i = 0; i + 2 < p.length; i++) {
+    const g = num[i], c = num[i + 1], n = num[i + 2];
+    if (g == null || c == null || n == null) continue;
+    if (g < 1 || g > 6)  continue;   // 학년
+    if (c < 1 || c > 20) continue;   // 반
+    if (n < 1 || n > 50) continue;   // 번호
+    const sid = String(g) + String(c) + String(n).padStart(2, '0');
+    if (!/^\d{4}$/.test(sid)) continue;
+    /* 이름은 이메일 바로 앞 칸, 없으면 번호 다음 칸 */
+    let name = (eIdx > 0) ? p[eIdx - 1] : '';
+    if (!name) name = p[i + 3] || '';
+    return { sid: sid, name: name, pw: '', email: email };
+  }
+  return null;
+}
+
 $('#btnRosterSave').addEventListener('click', async () => {
   const text = $('#rosterPaste').value.trim();
   if (!text) { toast('붙여 넣은 내용이 없습니다', 'warn'); return; }
 
-  const rows = [];
-  const bad = [];
+  const rows = [], bad = [];
   text.split(/\r?\n/).forEach((line, i) => {
     if (!line.trim()) return;
-    const p = line.split(/[\t,]/).map(s => s.trim());
-    if (!/^\d{4}$/.test(p[0])) { bad.push(`${i + 1}줄: ${line.slice(0, 24)}`); return; }
-    rows.push({ sid: p[0], name: p[1] || '', pw: p[2] || '' });
+    const r = parseRosterLine(line);
+    if (!r) { bad.push((i + 1) + '줄'); return; }
+    rows.push(r);
   });
 
-  if (bad.length) {
-    if (!confirm(`학번이 네 자리가 아닌 줄 ${bad.length}개는 건너뜁니다.\n\n${bad.slice(0, 5).join('\n')}\n\n계속할까요?`)) return;
+  if (!rows.length) {
+    alert('읽을 수 있는 줄이 없습니다.\n\n' +
+          '· 학번 / 이름 / 비밀번호  세 칸\n' +
+          '· 또는 계정 엑셀 통째로 (학년·반·번호·이름·아이디 포함)\n\n' +
+          '이 두 가지 모양만 알아봅니다.');
+    return;
   }
-  if (!rows.length) { toast('넣을 줄이 없습니다', 'warn'); return; }
 
   /* 학번 중복은 여기서 먼저 걸러 냅니다. */
-  const seen = {}; const dup = [];
+  const seen = {}, dup = [];
   rows.forEach(r => { if (seen[r.sid]) dup.push(r.sid); seen[r.sid] = true; });
-  if (dup.length) { toast(`학번이 겹칩니다: ${dup.slice(0, 5).join(', ')}`, 'bad', 5000); return; }
+  if (dup.length) {
+    toast('학번이 겹칩니다: ' + dup.slice(0, 5).join(', '), 'bad', 7000);
+    return;
+  }
 
-  const res = await apiPost('teacherRosterUpsert', { idToken: Auth.idToken, rows });
+  /* 넣기 전에 무엇이 들어가는지 보여 줍니다.
+     266명을 한 번에 넣으므로 앞뒤 몇 줄이라도 눈으로 보는 편이 안전합니다. */
+  const withMail = rows.filter(r => r.email).length;
+  const show = r => '  ' + r.sid + '  ' + (r.name || '(이름없음)') + '  ' + (r.email || '(계정없음)');
+  let sample = rows.slice(0, 3).map(show).join('\n');
+  if (rows.length > 4) sample += '\n   …\n' + show(rows[rows.length - 1]);
+
+  const ok = confirm(
+    rows.length + '명을 넣습니다.\n' +
+    '그중 ' + withMail + '명은 구글 계정이 함께 연결됩니다.\n' +
+    (bad.length ? '읽지 못한 줄 ' + bad.length + '개는 건너뜁니다.\n' : '') +
+    '\n' + sample + '\n\n' +
+    (withMail ? '계정이 연결되면 그 학생은 자기 계정으로만 들어올 수 있습니다.\n' : '') +
+    '계속할까요?');
+  if (!ok) return;
+
+  const btn = $('#btnRosterSave');
+  btn.disabled = true; btn.textContent = '넣는 중…';
+
+  const res = await apiPost('teacherRosterUpsert', { idToken: Auth.idToken, rows }, 60000);
+
+  btn.disabled = false; btn.textContent = '명렬표에 넣기';
+
   if (res && res.ok) {
-    toast(`새로 ${res.added}명, 고침 ${res.updated}명`, 'ok', 4000);
+    toast('새로 ' + res.added + '명, 고침 ' + res.updated + '명 · 계정 연결 ' + withMail + '명', 'ok', 6000);
+    logOp('명렬표 — 새로 ' + res.added + ' / 고침 ' + res.updated + ' / 계정연결 ' + withMail, 'ok');
     $('#rosterPaste').value = '';
     loadRoster();
-  } else toast(errText(res), 'bad');
+  } else {
+    toast(errText(res), 'bad', 8000);
+    logOp('명렬표 실패 — ' + errText(res), 'bad');
+  }
 });
 
 $('#btnResetBind').addEventListener('click', async () => {
