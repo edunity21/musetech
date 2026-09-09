@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#121212">
+<meta name="robots" content="noindex">
+<title>녹화 점검 · 음악 산업 탐구</title>
+<style>
+:root{
+  --bg:#121212; --card:#1a1a1a; --line:#2c2c2c;
+  --tx:#eaeaea; --dim:#9a9a9a; --accent:#1DB954;
+  --warn:#F2C14E; --bad:#E8734A;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; padding:0 16px 60px;
+  background:var(--bg); color:var(--tx);
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",
+              "Noto Sans KR",sans-serif;
+  font-size:16px; line-height:1.65; -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:620px; margin:0 auto}
+header{padding:28px 0 6px}
+h1{font-size:1.35rem; margin:0 0 6px; letter-spacing:-.02em}
+h2{font-size:1.02rem; margin:0 0 10px; letter-spacing:-.01em}
+.sub{color:var(--dim); font-size:.9rem; margin:0}
+.card{
+  background:var(--card); border:1px solid var(--line);
+  border-radius:14px; padding:18px; margin-top:14px;
+}
+.step{display:flex; align-items:center; gap:9px; margin-bottom:12px}
+.no{
+  width:26px; height:26px; flex:0 0 26px; border-radius:8px;
+  background:var(--accent); color:#000; font-weight:700; font-size:.85rem;
+  display:grid; place-items:center;
+}
+button{
+  font:inherit; font-weight:600; color:var(--tx);
+  background:#262626; border:1px solid #383838; border-radius:10px;
+  padding:13px 18px; min-height:48px; cursor:pointer;
+}
+button.primary{background:var(--accent); border-color:var(--accent); color:#000}
+button.block{display:block; width:100%}
+button:disabled{opacity:.4; cursor:default}
+button+button{margin-top:8px}
+.row{display:flex; gap:8px; flex-wrap:wrap}
+.row>button{flex:1 1 150px; margin-top:0}
+video{
+  width:100%; aspect-ratio:4/3; background:#000;
+  border-radius:10px; display:block; object-fit:cover;
+}
+table{width:100%; border-collapse:collapse; font-size:.88rem}
+td{padding:7px 0; border-bottom:1px solid var(--line); vertical-align:top}
+td:first-child{color:var(--dim); width:40%; padding-right:10px}
+td:last-child{font-variant-numeric:tabular-nums; word-break:break-all}
+.ok{color:var(--accent)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+.dim{color:var(--dim)}
+.note{
+  background:#1e1e1e; border-left:3px solid var(--accent);
+  padding:11px 13px; border-radius:0 8px 8px 0;
+  font-size:.88rem; color:#cfcfcf; margin:0 0 14px;
+}
+.big{font-size:2.1rem; font-weight:700; text-align:center;
+     font-variant-numeric:tabular-nums; margin:8px 0 2px; letter-spacing:-.02em}
+.biglab{text-align:center; color:var(--dim); font-size:.85rem; margin:0 0 6px}
+.clock{
+  position:absolute; top:10px; left:10px;
+  background:rgba(0,0,0,.66); color:#fff; border-radius:8px;
+  padding:4px 10px; font-size:.9rem; font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+.rec{
+  position:absolute; top:10px; right:10px; display:flex; align-items:center; gap:6px;
+  background:rgba(0,0,0,.66); border-radius:8px; padding:4px 10px; font-size:.82rem;
+}
+.rec i{width:9px; height:9px; border-radius:50%; background:var(--bad); display:block;
+       animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:.15}}
+.vidbox{position:relative}
+.hide{display:none !important}
+textarea{
+  width:100%; min-height:150px; background:#0e0e0e; color:var(--tx);
+  border:1px solid var(--line); border-radius:10px; padding:12px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.8rem; line-height:1.5;
+}
+footer{color:var(--dim); font-size:.8rem; text-align:center; margin-top:26px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>녹화 점검</h1>
+  <p class="sub">음악 산업 탐구 · 학생 태블릿에서 1분 발표 영상을 찍을 수 있는지 미리 봅니다.</p>
+</header>
+
+<!-- 1단계 -------------------------------------------------------------- -->
+<div class="card">
+  <div class="step"><div class="no">1</div><h2>이 기기가 녹화를 지원하나요</h2></div>
+  <table id="tblEnv"><tr><td>확인하는 중…</td><td></td></tr></table>
+</div>
+
+<!-- 2단계 -------------------------------------------------------------- -->
+<div class="card">
+  <div class="step"><div class="no">2</div><h2>카메라 켜기</h2></div>
+  <p class="note">누르면 카메라·마이크를 써도 되는지 물어봅니다. <b>허용</b>을 눌러 주세요.
+    학생이 수업 시간에 보게 될 것과 같은 물음입니다.</p>
+  <div class="vidbox">
+    <video id="live" playsinline muted></video>
+    <div class="clock hide" id="clock">00:15</div>
+    <div class="rec hide" id="recDot"><i></i>녹화 중</div>
+  </div>
+  <button class="primary block" id="btnCam" style="margin-top:12px">카메라 켜기</button>
+  <table id="tblCam" class="hide" style="margin-top:12px"></table>
+</div>
+
+<!-- 3단계 -------------------------------------------------------------- -->
+<div class="card">
+  <div class="step"><div class="no">3</div><h2>시험 녹화</h2></div>
+  <p class="note">15초만 찍어 보고 <b>1분이면 몇 MB가 되는지</b> 계산합니다.
+    평소 목소리로 아무 말이나 해 보세요. 소리가 같이 담기는지도 함께 봅니다.</p>
+  <div class="row">
+    <button class="primary" id="btnRec15" disabled>15초 시험 녹화</button>
+    <button id="btnRec60" disabled>1분 그대로 찍기</button>
+  </div>
+  <div id="result" class="hide" style="margin-top:16px">
+    <p class="big" id="bigMB">–</p>
+    <p class="biglab">1분 영상 예상 용량</p>
+    <table id="tblRec"></table>
+  </div>
+</div>
+
+<!-- 4단계 -------------------------------------------------------------- -->
+<div class="card hide" id="cardPlay">
+  <div class="step"><div class="no">4</div><h2>찍은 것 확인</h2></div>
+  <p class="note">소리가 나오는지, 얼굴이 알아볼 만한지 보세요.
+    여기서 잘 나오면 학생 화면에 그대로 넣을 수 있습니다.</p>
+  <video id="play" controls playsinline></video>
+  <button class="block" id="btnDl" style="margin-top:12px">이 영상을 태블릿에 내려받기</button>
+</div>
+
+<!-- 5단계 -------------------------------------------------------------- -->
+<div class="card hide" id="cardSum">
+  <div class="step"><div class="no">5</div><h2>결과 보내기</h2></div>
+  <p class="note">아래 글을 통째로 복사해서 저에게 붙여 주시면,
+    이 기기에 맞춰 화질과 용량을 정하겠습니다.</p>
+  <textarea id="sum" readonly></textarea>
+  <button class="primary block" id="btnCopy" style="margin-top:10px">복사하기</button>
+</div>
+
+<footer>camtest v1.0 · 이 페이지는 아무것도 서버로 보내지 않습니다.</footer>
+</div>
+
+<script>
+/* ==========================================================================
+   녹화 점검 — 학생 태블릿에서 MediaRecorder 가 쓸 만한지 재 봅니다.
+   서버 통신은 하지 않습니다. 찍은 영상은 이 기기 메모리에만 있습니다.
+   ========================================================================== */
+
+var $ = function (s) { return document.querySelector(s); };
+var LOG = {};                 // 결과 요약에 담을 값
+var stream = null, rec = null, chunks = [], blob = null, mime = '';
+var TARGET_V = 600000, TARGET_A = 64000;   // 480p 600kbps + 소리 64kbps 를 노림
+
+/* 코덱 후보. 앞에 있는 것부터 씁니다.
+   mp4 가 되면 mp4 를 씁니다 — 아이패드·갤럭시탭·PC 어디서나 바로 재생됩니다. */
+var CAND = [
+  'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+  'video/mp4',
+  'video/webm;codecs=h264,opus',
+  'video/webm;codecs=vp8,opus',
+  'video/webm;codecs=vp9,opus',
+  'video/webm'
+];
+
+function row(k, v, cls) {
+  return '<tr><td>' + k + '</td><td' + (cls ? ' class="' + cls + '"' : '') + '>' + v + '</td></tr>';
+}
+function mb(bytes) { return (bytes / 1048576).toFixed(1); }
+
+/* ---------- 1단계 · 기기 확인 ---------------------------------------- */
+(function checkEnv() {
+  var out = '';
+  var secure = window.isSecureContext;
+  var hasGUM = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  var hasMR  = (typeof MediaRecorder !== 'undefined');
+
+  LOG.ua = navigator.userAgent;
+  LOG.secure = secure; LOG.gum = hasGUM; LOG.mr = hasMR;
+
+  out += row('보안 연결(https)', secure ? '됨' : '아님 — 이러면 카메라를 못 씁니다',
+             secure ? 'ok' : 'bad');
+  out += row('카메라 기능', hasGUM ? '있음' : '없음', hasGUM ? 'ok' : 'bad');
+  out += row('녹화 기능', hasMR ? '있음' : '없음 — 이 기기는 앱 안에서 못 찍습니다',
+             hasMR ? 'ok' : 'bad');
+
+  var good = [];
+  if (hasMR && MediaRecorder.isTypeSupported) {
+    for (var i = 0; i < CAND.length; i++) {
+      try { if (MediaRecorder.isTypeSupported(CAND[i])) good.push(CAND[i]); } catch (e) {}
+    }
+  }
+  LOG.codecs = good;
+  mime = good[0] || '';
+  out += row('쓸 수 있는 형식',
+             good.length ? good.map(function (g) { return g.split(';')[0]; })
+                               .filter(function (v, i, a) { return a.indexOf(v) === i; }).join(', ')
+                         : '없음',
+             good.length ? 'ok' : 'bad');
+  out += row('고를 형식', mime || '—', mime.indexOf('mp4') === 0 ? 'ok' : (mime ? 'warn' : 'bad'));
+  out += row('화면 크기', window.screen.width + ' × ' + window.screen.height +
+             ' (' + (window.devicePixelRatio || 1) + '배)');
+
+  $('#tblEnv').innerHTML = out;
+
+  if (!secure || !hasGUM || !hasMR) {
+    $('#btnCam').disabled = true;
+    $('#btnCam').textContent = '이 기기에서는 앱 안 녹화가 안 됩니다';
+  }
+})();
+
+/* ---------- 2단계 · 카메라 ------------------------------------------- */
+$('#btnCam').addEventListener('click', async function () {
+  var b = $('#btnCam');
+  b.disabled = true; b.textContent = '카메라를 여는 중…';
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user',
+               width:  { ideal: 640 },
+               height: { ideal: 480 },
+               frameRate: { ideal: 24, max: 30 } },
+      audio: { echoCancellation: true, noiseSuppression: true }
+    });
+  } catch (e) {
+    LOG.camError = e.name + ' / ' + e.message;
+    b.disabled = false; b.textContent = '다시 켜 보기';
+    $('#tblCam').classList.remove('hide');
+    $('#tblCam').innerHTML = row('카메라를 못 켰습니다', e.name + ' — ' + e.message, 'bad') +
+      row('흔한 까닭',
+          e.name === 'NotAllowedError' ? '허용을 안 눌렀거나, 기기 설정에서 막혀 있습니다.'
+        : e.name === 'NotFoundError'   ? '앞 카메라를 찾지 못했습니다.'
+        : e.name === 'NotReadableError'? '다른 앱이 카메라를 쓰고 있습니다.'
+        : '학교에서 관리 설정으로 막았을 수 있습니다.');
+    showSummary();
+    return;
+  }
+
+  $('#live').srcObject = stream;
+  $('#live').play().catch(function () {});
+  b.classList.add('hide');
+
+  var vt = stream.getVideoTracks()[0], at = stream.getAudioTracks()[0];
+  var s = vt ? vt.getSettings() : {};
+  LOG.video = s; LOG.audio = !!at;
+
+  $('#tblCam').classList.remove('hide');
+  $('#tblCam').innerHTML =
+    row('실제 화면 크기', (s.width || '?') + ' × ' + (s.height || '?'), 'ok') +
+    row('초당 장면 수', (s.frameRate ? Math.round(s.frameRate) : '?') + ' 장') +
+    row('마이크', at ? '잡힘' : '없음', at ? 'ok' : 'bad');
+
+  $('#btnRec15').disabled = false;
+  $('#btnRec60').disabled = false;
+});
+
+/* ---------- 3단계 · 녹화 --------------------------------------------- */
+function record(seconds) {
+  if (!stream) return;
+  chunks = []; blob = null;
+  $('#result').classList.add('hide');
+  $('#cardPlay').classList.add('hide');
+  $('#btnRec15').disabled = true; $('#btnRec60').disabled = true;
+
+  var opt = { videoBitsPerSecond: TARGET_V, audioBitsPerSecond: TARGET_A };
+  if (mime) opt.mimeType = mime;
+
+  try { rec = new MediaRecorder(stream, opt); }
+  catch (e) {
+    try { rec = new MediaRecorder(stream); }        // 옵션을 거절하면 기본값으로
+    catch (e2) {
+      LOG.recError = e2.name + ' / ' + e2.message;
+      alert('이 기기에서는 녹화를 시작하지 못했습니다: ' + e2.message);
+      $('#btnRec15').disabled = false; $('#btnRec60').disabled = false;
+      showSummary();
+      return;
+    }
+  }
+  LOG.usedMime = rec.mimeType || mime || '(모름)';
+
+  rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+  rec.onstop = function () { finish(seconds); };
+
+  var t0 = Date.now();
+  rec.start(1000);                                   // 1초마다 조각을 받습니다
+  $('#recDot').classList.remove('hide');
+  $('#clock').classList.remove('hide');
+
+  var timer = setInterval(function () {
+    var left = Math.max(0, seconds - Math.round((Date.now() - t0) / 1000));
+    $('#clock').textContent = '00:' + (left < 10 ? '0' : '') + left;
+    if (left <= 0) {
+      clearInterval(timer);
+      $('#recDot').classList.add('hide');
+      $('#clock').classList.add('hide');
+      try { rec.stop(); } catch (e) {}
+    }
+  }, 200);
+  $('#clock').textContent = '00:' + (seconds < 10 ? '0' : '') + seconds;
+}
+
+function finish(seconds) {
+  blob = new Blob(chunks, { type: (rec && rec.mimeType) || mime || 'video/mp4' });
+  var perMin = blob.size * (60 / seconds);
+  var kbps = Math.round(blob.size * 8 / seconds / 1000);
+
+  LOG.seconds = seconds;
+  LOG.bytes = blob.size;
+  LOG.perMinMB = +mb(perMin);
+  LOG.kbps = kbps;
+
+  $('#bigMB').textContent = mb(perMin) + ' MB';
+  $('#bigMB').className = 'big ' + (perMin < 8388608 ? 'ok' : perMin < 26214400 ? 'warn' : 'bad');
+
+  var judge = perMin < 8388608
+      ? '아주 좋습니다. 한 학급 30명이 250MB 안팎이라 수업 중에 무리 없이 올라갑니다.'
+    : perMin < 26214400
+      ? '쓸 만합니다. 화질을 한 단계 낮추면 더 가벼워집니다.'
+      : '너무 큽니다. 화질·초당 장면 수를 낮추도록 손보겠습니다.';
+
+  $('#tblRec').innerHTML =
+    row('찍은 길이', seconds + '초') +
+    row('실제 파일 크기', mb(blob.size) + ' MB') +
+    row('초당 자료량', kbps + ' kbps') +
+    row('한 학급 30명이면', mb(perMin * 30) + ' MB') +
+    row('3학년 265명이면', (perMin * 265 / 1073741824).toFixed(2) + ' GB') +
+    row('저장 형식', LOG.usedMime) +
+    row('판단', judge, perMin < 8388608 ? 'ok' : perMin < 26214400 ? 'warn' : 'bad');
+
+  $('#result').classList.remove('hide');
+  $('#cardPlay').classList.remove('hide');
+  $('#play').src = URL.createObjectURL(blob);
+  $('#btnRec15').disabled = false; $('#btnRec60').disabled = false;
+  showSummary();
+  $('#cardPlay').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+$('#btnRec15').addEventListener('click', function () { record(15); });
+$('#btnRec60').addEventListener('click', function () { record(60); });
+
+/* ---------- 4단계 · 내려받기 ------------------------------------------ */
+$('#btnDl').addEventListener('click', function () {
+  if (!blob) return;
+  var ext = (LOG.usedMime || '').indexOf('mp4') >= 0 ? 'mp4' : 'webm';
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '녹화점검.' + ext;
+  document.body.appendChild(a); a.click();
+  setTimeout(function () { a.remove(); }, 500);
+});
+
+/* ---------- 5단계 · 결과 요약 ----------------------------------------- */
+function showSummary() {
+  var L = [];
+  L.push('[녹화 점검 결과]');
+  L.push('기기: ' + LOG.ua);
+  L.push('화면: ' + window.screen.width + '×' + window.screen.height +
+         ' (' + (window.devicePixelRatio || 1) + '배)');
+  L.push('보안연결 ' + (LOG.secure ? 'O' : 'X') +
+         ' / 카메라 ' + (LOG.gum ? 'O' : 'X') +
+         ' / 녹화 ' + (LOG.mr ? 'O' : 'X'));
+  L.push('가능 형식: ' + ((LOG.codecs && LOG.codecs.length) ? LOG.codecs.join(' | ') : '없음'));
+  if (LOG.camError) L.push('카메라 오류: ' + LOG.camError);
+  if (LOG.recError) L.push('녹화 오류: ' + LOG.recError);
+  if (LOG.video) {
+    L.push('실제 촬영: ' + LOG.video.width + '×' + LOG.video.height +
+           ' @' + Math.round(LOG.video.frameRate || 0) + 'fps, 마이크 ' + (LOG.audio ? 'O' : 'X'));
+  }
+  if (LOG.bytes) {
+    L.push('저장 형식: ' + LOG.usedMime);
+    L.push(LOG.seconds + '초 = ' + mb(LOG.bytes) + 'MB → 1분 ' + LOG.perMinMB + 'MB (' + LOG.kbps + 'kbps)');
+    L.push('30명 ' + mb(LOG.bytes * (60 / LOG.seconds) * 30) + 'MB / 265명 ' +
+           (LOG.bytes * (60 / LOG.seconds) * 265 / 1073741824).toFixed(2) + 'GB');
+  }
+  $('#sum').value = L.join('\n');
+  $('#cardSum').classList.remove('hide');
+}
+
+$('#btnCopy').addEventListener('click', async function () {
+  var t = $('#sum');
+  try {
+    await navigator.clipboard.writeText(t.value);
+    $('#btnCopy').textContent = '복사했습니다';
+  } catch (e) {
+    t.removeAttribute('readonly'); t.focus(); t.select();
+    document.execCommand('copy');
+    t.setAttribute('readonly', 'readonly');
+    $('#btnCopy').textContent = '복사했습니다 (안 되면 손으로 긁어 주세요)';
+  }
+  setTimeout(function () { $('#btnCopy').textContent = '복사하기'; }, 2500);
+});
+
+/* 페이지를 떠날 때 카메라를 끕니다. */
+window.addEventListener('pagehide', function () {
+  if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+});
+</script>
+</body>
+</html>
