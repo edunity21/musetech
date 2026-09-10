@@ -3,7 +3,7 @@
  *  버전: student v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const APP_VERSION = 'student v1.6.0 (2026-09-10) 거울보기';
+const APP_VERSION = 'student v1.7.0 (2026-09-10) 거울저장';
 console.log('%c' + APP_VERSION, 'background:#1DB954;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -1162,7 +1162,11 @@ const V = {
   uploading: false,
   sent: null,        // 이미 낸 영상 {url, at, sizeMB, seconds, retakes}
   retakes: 0,
-  supported: true
+  supported: true,
+  canvas: null,      // 좌우 뒤집어 그리는 그림판
+  mixed: null,       // 그림판 + 소리를 합친 신호
+  drawId: null,      // 그리기 반복 번호
+  savedMirrored: false  // 이번에 찍은 것이 뒤집혀 저장되었는지
 };
 
 /* 쓸 수 있는 형식. 앞에 있는 것부터 씁니다.
@@ -1185,7 +1189,7 @@ const V_MIME = [
 const vEl = {};
 function vGrab() {
   ['vState', 'vBox', 'vLive', 'vPlay', 'vHint', 'vClock', 'vRec', 'vPrompt',
-   'vPromptToggle', 'vOptions', 'vMirror', 'vBar', 'vFill', 'vMsg',
+   'vPromptToggle', 'vOptions', 'vMirror', 'vMirrorNote', 'vBar', 'vFill', 'vMsg',
    'btnVCam', 'btnVRec', 'btnVStop', 'btnVAgain', 'btnVSend'
   ].forEach(function (id) { vEl[id] = $('#' + id); });
 }
@@ -1207,11 +1211,94 @@ function vMirrorOn() {
   return (saved === null) ? !!VIDEO_MIRROR_DEFAULT : !!saved;
 }
 
+/** 이 기기가 「뒤집어서 저장」까지 할 수 있는지. (그림판 신호 뽑기가 되는지) */
+function vCanMirrorSave() {
+  try { return typeof document.createElement('canvas').captureStream === 'function'; }
+  catch (e) { return false; }
+}
+
+/** 지금 저장까지 뒤집어야 하는 상황인가 */
+function vMirrorSaving() {
+  return !!(VIDEO_MIRROR_SAVE && vEl.vMirror && vEl.vMirror.checked && vCanMirrorSave());
+}
+
 function vApplyMirror() {
   const on = vEl.vMirror ? vEl.vMirror.checked : vMirrorOn();
-  /* 미리보기만 뒤집습니다. 다시 보기(#vPlay)는 실제 영상이라 건드리지 않습니다. */
   if (vEl.vLive) vEl.vLive.style.transform = on ? 'scaleX(-1)' : '';
   LS.set(V_MIRROR_KEY, on);
+
+  /* 다시 보기(#vPlay)에는 절대 손대지 않습니다.
+     저장까지 뒤집는 경우에는 파일 자체가 이미 뒤집혀 있고,
+     아닌 경우에는 안 뒤집힌 것이 맞는 모습이기 때문입니다. */
+
+  if (!vEl.vMirrorNote) return;
+  if (!VIDEO_MIRROR_SAVE) {
+    vEl.vMirrorNote.innerHTML =
+      '화면만 뒤집습니다. <b>찍힌 영상은 뒤집히지 않습니다</b> — 남들이 보는 그대로 저장됩니다.';
+  } else if (!vCanMirrorSave()) {
+    vEl.vMirrorNote.innerHTML =
+      '이 태블릿은 화면만 뒤집을 수 있습니다. <b>찍힌 영상은 뒤집히지 않습니다.</b>';
+  } else if (on) {
+    vEl.vMirrorNote.innerHTML =
+      '<b>보이는 그대로 저장됩니다.</b> 옷이나 뒤쪽 칠판에 글씨가 있으면 그 글씨는 거꾸로 보입니다.';
+  } else {
+    vEl.vMirrorNote.innerHTML =
+      '카메라가 잡은 그대로 — 남들이 보는 모습으로 저장됩니다.';
+  }
+}
+
+/* ---------- 뒤집어서 저장하기 ----------
+   녹화기는 카메라 신호를 그대로 받아 적기 때문에, 화면에 CSS 로 뒤집어 놓아도
+   파일에는 묻지 않습니다. 그래서 저장까지 뒤집으려면 신호 자체를 바꿔야 합니다.
+
+   ① 안 보이는 그림판(canvas)을 하나 두고
+   ② 카메라 그림을 좌우로 뒤집어 거기에 계속 그리고
+   ③ 그 그림판에서 새 영상 신호를 뽑아
+   ④ 원래 소리와 합쳐 그것을 녹화합니다.
+
+   그림 크기가 640×480 이라 태블릿에도 부담이 적습니다. */
+
+function vBuildRecordStream() {
+  if (!vMirrorSaving()) return V.stream;          // 그냥 카메라 신호를 씁니다
+
+  try {
+    const track = V.stream.getVideoTracks()[0];
+    const s = track ? track.getSettings() : {};
+    const w = s.width || VIDEO_WIDTH;
+    const h = s.height || VIDEO_HEIGHT;
+
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d');
+    ctx.translate(w, 0);
+    ctx.scale(-1, 1);                              // 여기서 좌우가 뒤집힙니다
+
+    const draw = function () {
+      try { ctx.drawImage(vEl.vLive, 0, 0, w, h); } catch (e) {}
+      V.drawId = requestAnimationFrame(draw);
+    };
+    draw();
+
+    const out = cv.captureStream(VIDEO_FPS);
+    V.stream.getAudioTracks().forEach(function (t) { out.addTrack(t); });
+
+    V.canvas = cv;
+    V.mixed = out;
+    return out;
+  } catch (e) {
+    vStopDraw();
+    return V.stream;                               // 안 되면 그냥 카메라 신호로
+  }
+}
+
+function vStopDraw() {
+  if (V.drawId) { cancelAnimationFrame(V.drawId); V.drawId = null; }
+  if (V.mixed) {
+    /* 소리는 카메라 것을 빌려 쓴 것이라 끄지 않습니다. 그림판 신호만 끕니다. */
+    V.mixed.getVideoTracks().forEach(function (t) { try { t.stop(); } catch (e) {} });
+    V.mixed = null;
+  }
+  V.canvas = null;
 }
 
 /* ---------- 시작할 때 한 번 ---------- */
@@ -1357,6 +1444,7 @@ async function vOpenCam() {
 }
 
 function vStopCam() {
+  vStopDraw();
   if (!V.stream) return;
   V.stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} });
   V.stream = null;
@@ -1374,10 +1462,15 @@ function vStart() {
   const opt = { videoBitsPerSecond: VIDEO_BPS, audioBitsPerSecond: VIDEO_AUDIO_BPS };
   if (V.mime) opt.mimeType = V.mime;
 
-  try { V.rec = new MediaRecorder(V.stream, opt); }
+  /* 거울로 저장할 상황이면 뒤집은 신호를, 아니면 카메라 신호를 그대로 녹화합니다. */
+  V.savedMirrored = vMirrorSaving();
+  const src = vBuildRecordStream();
+
+  try { V.rec = new MediaRecorder(src, opt); }
   catch (e) {
-    try { V.rec = new MediaRecorder(V.stream); }       // 옵션을 거절하면 기본값으로
+    try { V.rec = new MediaRecorder(src); }            // 옵션을 거절하면 기본값으로
     catch (e2) {
+      vStopDraw();
       vMsg('녹화를 시작하지 못했습니다. 선생님께 말씀해 주세요.', 'bad');
       V.rec = null; return;
     }
@@ -1391,6 +1484,7 @@ function vStart() {
   try { V.rec.start(1000); }
   catch (e) { vMsg('녹화를 시작하지 못했습니다.', 'bad'); V.rec = null; return; }
 
+  vEl.vMirror.disabled = true;        // 찍는 도중에 바꾸면 영상이 섞입니다
   vShow(vEl.btnVRec, false);
   vShow(vEl.btnVStop, true);
   vShow(vEl.vClock, true);
@@ -1422,6 +1516,8 @@ function vStop(manual) {
 
 function vFinish() {
   V.rec = null;
+  vStopDraw();
+  vEl.vMirror.disabled = false;
   V.blob = new Blob(V.chunks, { type: (V.mime || 'video/mp4').split(';')[0] });
   V.chunks = [];
 
@@ -1436,8 +1532,8 @@ function vFinish() {
 
   const mb = (V.blob.size / 1048576).toFixed(1);
   vState('찍었습니다 · 아직 내지 않았습니다', 'wait');
-  /* 거울로 보다가 다시 보기를 하면 좌우가 달라 보입니다. 고장이 아니라고 알려 줍니다. */
-  const mirrorNote = (vEl.vMirror && vEl.vMirror.checked)
+  /* 거울로 보다가 저장은 안 뒤집히는 경우에만, 좌우가 달라 보이는 게 맞다고 알려 줍니다. */
+  const mirrorNote = (vEl.vMirror && vEl.vMirror.checked && !V.savedMirrored)
     ? ' 아까와 좌우가 바뀐 것처럼 보이는 게 맞습니다 — 이게 남들이 보는 모습입니다.' : '';
   vMsg(`${V.seconds}초 · ${mb}MB — 한 번 보고, 괜찮으면 [이 영상 내기] 를 누르세요.` + mirrorNote);
   vApplyLock();
