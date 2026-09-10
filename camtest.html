@@ -163,14 +163,17 @@ var LOG = {};                 // 결과 요약에 담을 값
 var stream = null, rec = null, chunks = [], blob = null, mime = '';
 var TARGET_V = 600000, TARGET_A = 64000;   // 480p 600kbps + 소리 64kbps 를 노림
 
-/* 코덱 후보. 앞에 있는 것부터 씁니다.
-   mp4 가 되면 mp4 를 씁니다 — 아이패드·갤럭시탭·PC 어디서나 바로 재생됩니다. */
+/* 코덱 후보. 학생 화면(app.js)과 같은 차례로 두었습니다.
+   코덱까지 적은 것을 먼저 물어봅니다 — 그냥 'video/mp4' 만 물으면 「된다」고
+   답하고서 속에 엉뚱한 코덱을 넣는 브라우저가 있어, 이름은 .mp4 인데
+   구글 드라이브에서 재생이 안 되는 파일이 나오기 때문입니다. */
 var CAND = [
   'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
-  'video/mp4',
+  'video/mp4;codecs=avc1.4D401E,mp4a.40.2',
   'video/webm;codecs=h264,opus',
   'video/webm;codecs=vp8,opus',
   'video/webm;codecs=vp9,opus',
+  'video/mp4',
   'video/webm'
 ];
 

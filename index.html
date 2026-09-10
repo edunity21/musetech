@@ -163,7 +163,7 @@
 
       <div class="card">
         <h2>1분 발표 연습</h2>
-        <p class="muted">아래 세 문장을 소리 내어 읽어 보세요. 1분을 넘기면 줄여야 합니다.</p>
+        <p class="muted">찍기 전에 한 번 연습해 보세요. 1분을 넘기면 줄여야 합니다.</p>
         <div class="timer">
           <div class="clock" id="clock">01:00</div>
           <button class="btn primary" id="btnTimer">시작</button>
@@ -172,12 +172,48 @@
         <div id="scriptView" style="margin-top:14px"></div>
       </div>
 
+      <!-- ---------- 1분 발표 영상 ---------- -->
+      <div class="card" id="cardVideo">
+        <h2>1분 발표 영상</h2>
+        <p class="muted">내 발표를 태블릿으로 찍어서 냅니다.
+          <b>60초가 되면 저절로 멈춥니다.</b> 마음에 들 때까지 다시 찍어도 됩니다.</p>
+
+        <div class="v-state" id="vState">아직 찍지 않았습니다</div>
+
+        <div class="v-box" id="vBox">
+          <video id="vLive" playsinline muted></video>
+          <video id="vPlay" playsinline controls hidden></video>
+          <div class="v-hint" id="vHint">[카메라 켜기] 를 누르면 여기에 내 모습이 보입니다</div>
+          <div class="v-clock" id="vClock" hidden>01:00</div>
+          <div class="v-rec" id="vRec" hidden><i></i>녹화 중</div>
+          <div class="v-prompt" id="vPrompt" hidden></div>
+        </div>
+
+        <label class="v-check" id="vPromptToggleWrap" hidden>
+          <input type="checkbox" id="vPromptToggle" checked>
+          찍는 동안 화면 아래에 원고(9번 세 문장) 보여 주기
+        </label>
+
+        <div class="v-bar" id="vBar" hidden><div class="fill" id="vFill"></div></div>
+
+        <div class="btnrow" style="margin-top:12px">
+          <button class="btn primary" id="btnVCam">카메라 켜기</button>
+          <button class="btn primary" id="btnVRec" hidden>● 녹화 시작</button>
+          <button class="btn danger" id="btnVStop" hidden>지금 멈추기</button>
+          <button class="btn" id="btnVAgain" hidden>다시 찍기</button>
+          <button class="btn primary" id="btnVSend" hidden>이 영상 내기</button>
+        </div>
+        <p class="v-msg" id="vMsg"></p>
+      </div>
+
       <div class="card">
-        <h2>발표할 때 이렇게</h2>
+        <h2>찍을 때 이렇게</h2>
         <ul class="think">
-          <li>모둠원을 보고 말합니다. 화면만 읽지 않습니다.</li>
+          <li><b>화면이 아니라 카메라를 봅니다.</b> 눈을 맞추고 말하는 것처럼 보입니다.</li>
           <li>① 무슨 분야인가 → ② 음악이 어떻게 쓰이는가 → ③ 왜 중요한가, 순서로 말합니다.</li>
-          <li>발표가 끝나면 질문을 하나 받습니다. 원고에 없는 말이어도 괜찮습니다.</li>
+          <li>원고를 그대로 읽지 말고, 한 번 읽어 본 뒤 자기 말로 하세요.</li>
+          <li>주위가 시끄러우면 소리가 묻힙니다. 태블릿을 얼굴에서 한 뼘 반쯤 두세요.</li>
+          <li>다 찍었으면 꼭 <b>[이 영상 내기]</b> 까지 눌러야 선생님께 갑니다.</li>
         </ul>
       </div>
     </section>

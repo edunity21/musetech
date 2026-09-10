@@ -866,3 +866,126 @@ body.exam .nowbar { border-top-color: #A3122A; }
 }
 #lnkManual { color: var(--muted); text-decoration: underline; }
 #lnkManual:hover { color: var(--text); }
+
+/* ---------------------------------------------------------------------------
+ *  21. 1분 발표 영상 (학생 화면) — 2026-09-10
+ *      카메라 미리보기 · 녹화 · 다시 보기 · 보내기 진행률
+ * -------------------------------------------------------------------------*/
+
+/* 지금 어디까지 왔는지 한 줄로 알려 줍니다. */
+.v-state {
+  display: inline-block; margin: 0 0 12px;
+  padding: 7px 14px; border-radius: 999px;
+  font-size: .9rem; font-weight: 700;
+  background: var(--card-3); color: var(--muted);
+}
+.v-state.ok   { background: rgba(29, 185, 84, .16);  color: #55D98A; }
+.v-state.rec  { background: rgba(240, 97, 107, .16); color: #FF9AAB; }
+.v-state.wait { background: rgba(245, 197, 24, .14); color: #F5C518; }
+
+/* 카메라가 보이는 네모. 4:3 으로 잡아 두어 화면이 튀지 않습니다. */
+.v-box {
+  position: relative; width: 100%; aspect-ratio: 4 / 3; max-width: 560px;
+  background: #000; border: 1px solid var(--line); border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.v-box video {
+  width: 100%; height: 100%; display: block; object-fit: cover; background: #000;
+}
+.v-box video[hidden] { display: none; }
+
+.v-hint {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  padding: 20px; text-align: center; color: var(--dim); font-size: .92rem;
+  pointer-events: none;
+}
+
+/* 남은 시간 · 녹화 중 표시 */
+.v-clock {
+  position: absolute; top: 10px; left: 10px; z-index: 2;
+  background: rgba(0, 0, 0, .68); color: #fff;
+  border-radius: var(--r); padding: 5px 12px;
+  font-size: 1.05rem; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.v-clock.over { color: var(--warn); }
+.v-rec {
+  position: absolute; top: 10px; right: 10px; z-index: 2;
+  display: flex; align-items: center; gap: 7px;
+  background: rgba(0, 0, 0, .68); border-radius: var(--r);
+  padding: 5px 12px; font-size: .85rem; font-weight: 700;
+}
+.v-rec i {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--danger);
+  display: block; animation: vblink 1s steps(1) infinite;
+}
+@keyframes vblink { 50% { opacity: .15; } }
+
+/* 원고 띄우기 — 눈이 카메라에서 멀어지지 않도록 아래쪽에 둡니다. */
+.v-prompt {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 2;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, .82) 32%);
+  padding: 26px 14px 12px; color: #fff;
+  font-size: .92rem; line-height: 1.5;
+  max-height: 52%; overflow-y: auto;
+}
+.v-prompt b { color: var(--accent); font-weight: 700; }
+.v-prompt p { margin: 0 0 5px; }
+.v-prompt p:last-child { margin-bottom: 0; }
+
+.v-check {
+  display: flex; align-items: center; gap: 8px;
+  margin: 10px 0 0; color: var(--muted); font-size: .88rem;
+  min-height: var(--tap); cursor: pointer;
+}
+.v-check input { width: 20px; height: 20px; accent-color: var(--accent); }
+
+/* 보내는 동안 차오르는 막대 */
+.v-bar {
+  margin-top: 12px; height: 8px; border-radius: 999px;
+  background: var(--card-3); overflow: hidden;
+}
+.v-bar .fill {
+  height: 100%; width: 0%; background: var(--accent);
+  border-radius: 999px; transition: width .25s ease;
+}
+
+.v-msg { margin: 10px 0 0; font-size: .88rem; color: var(--muted); min-height: 1.3em; }
+.v-msg.ok  { color: #55D98A; }
+.v-msg.bad { color: #FF9AAB; }
+
+/* 낸 영상 카드 */
+.v-done {
+  margin-top: 12px; padding: 12px 14px;
+  background: rgba(29, 185, 84, .10); border: 1px solid rgba(29, 185, 84, .3);
+  border-radius: var(--r); font-size: .9rem;
+}
+.v-done a { color: var(--accent); font-weight: 700; }
+
+@media (max-width: 480px) {
+  .v-box { max-width: 100%; }
+  .v-clock { font-size: .95rem; }
+}
+@media print { #cardVideo { display: none !important; } }
+
+/* ---------------------------------------------------------------------------
+ *  22. 발표 영상 (교사 화면) — 2026-09-10
+ * -------------------------------------------------------------------------*/
+
+/* 교실 화면에 띄우는 재생창. 학생 영상이 4:3 이라 그대로 맞췄습니다. */
+.pm-frame {
+  position: relative; width: 100%; aspect-ratio: 4 / 3;
+  background: #000; border: 1px solid var(--line);
+  border-radius: var(--r); overflow: hidden;
+}
+.pm-frame iframe {
+  position: absolute; inset: 0; width: 100%; height: 100%; border: 0;
+}
+
+/* 아직 안 낸 학생 줄은 흐리게 */
+.tb tr.dimrow td { opacity: .55; }
+
+#pmOpen { display: inline-flex; align-items: center; text-decoration: none; }
+
+@media (max-width: 700px) {
+  .pm-frame { aspect-ratio: 4 / 3; }
+}

@@ -3,7 +3,7 @@
  *  버전: teacher v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const TEACHER_VERSION = 'teacher v1.8.0 (2026-08-18) 계정목록붙여넣기';
+const TEACHER_VERSION = 'teacher v1.9.0 (2026-09-10) 발표영상';
 console.log('%c' + TEACHER_VERSION, 'background:#F5A524;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -93,9 +93,11 @@ setInterval(() => {
 $$('.tab').forEach(t => t.addEventListener('click', () => {
   const name = t.dataset.tab;
   $$('.tab').forEach(x => x.setAttribute('aria-selected', String(x === t)));
-  ['control', 'status', 'roster', 'learn', 'log'].forEach(n => $('#panel-' + n).hidden = (n !== name));
+  ['control', 'status', 'video', 'roster', 'learn', 'log']
+    .forEach(n => $('#panel-' + n).hidden = (n !== name));
   window.scrollTo({ top: 0, behavior: 'auto' });
   if (name === 'status') loadStatus();
+  if (name === 'video') loadVideos();
   if (name === 'roster') loadRoster();
   if (name === 'learn') renderLearn();
 }));
@@ -104,6 +106,9 @@ function boot() {
   $('#selClass').innerHTML = CLASS_LIST.map(c =>
     `<option value="${c}">${c}</option>`).join('');
   $('#selClass').value = T.cls;
+  $('#vdClass').innerHTML = CLASS_LIST.map(c =>
+    `<option value="${c}">${c}</option>`).join('');
+  $('#vdClass').value = T.cls;
   loadConfig();
   startAuto();
 }
@@ -981,4 +986,136 @@ function tCloseDetail() {
 
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !$('#tDetail').hidden) tCloseDetail();
+});
+
+/* ===========================================================================
+ *  8. 발표 영상 — 목록과 재생
+ *
+ *  3차시는 교실 화면에 영상을 띄워 함께 보고, 학생은 자기 태블릿의
+ *  [동료 평가] 탭에 적습니다. 그래서 여기서는 「순서대로 트는 것」이
+ *  가장 중요합니다. [다음 발표자 →] 하나로 넘어가도록 만들었습니다.
+ * ========================================================================= */
+
+const VD = {
+  rows: [],        // 서버가 준 목록 (모둠 → 순서 → 학번)
+  playable: [],    // 그중 영상을 낸 사람만
+  at: -1,          // 지금 몇 번째를 틀고 있는지
+  folder: ''       // 드라이브 폴더 주소
+};
+
+$('#vdClass').addEventListener('change', e => { T.cls = e.target.value; loadVideos(); });
+$('#vdRefresh').addEventListener('click', () => loadVideos());
+$('#vdOnlyDone').addEventListener('change', renderVideos);
+$('#vdPlayAll').addEventListener('click', () => {
+  if (!VD.playable.length) { toast('아직 낸 영상이 없습니다', 'warn'); return; }
+  playVideoAt(0);
+});
+$('#vdFolder').addEventListener('click', () => {
+  if (!VD.folder) { toast('폴더 주소를 받지 못했습니다', 'warn'); return; }
+  window.open(VD.folder, '_blank', 'noopener');
+});
+$('#vdMissing').addEventListener('click', () => {
+  const miss = VD.rows.filter(r => !r.video);
+  if (!miss.length) { toast('모두 냈습니다', 'ok'); return; }
+  const text = miss.map(r => `${r.sid} ${r.name}`).join('\n');
+  navigator.clipboard.writeText(text)
+    .then(() => toast(`안 낸 사람 ${miss.length}명을 복사했습니다`, 'ok'))
+    .catch(() => { prompt('아래를 복사하세요', text.replace(/\n/g, ' / ')); });
+});
+
+async function loadVideos(quiet) {
+  if (!quiet) $('#vdTable tbody').innerHTML =
+    '<tr><td colspan="9" class="dim">불러오는 중…</td></tr>';
+
+  const res = await apiPost('teacherVideos', { idToken: Auth.idToken, cls: T.cls }, 30000);
+  if (!res || !res.ok) {
+    $('#vdTable tbody').innerHTML =
+      `<tr><td colspan="9" class="err">${esc(errText(res))}</td></tr>`;
+    if (res && res.error === 'UNKNOWN_ACTION') {
+      $('#vdTable tbody').innerHTML =
+        '<tr><td colspan="9" class="err">서버에 영상 기능이 아직 붙지 않았습니다.' +
+        '<br>Apps Script 에 Video.gs 를 넣고 doPost 에 여섯 줄을 추가한 뒤,' +
+        ' [배포 관리] → [새 버전] 을 눌러 주세요.</td></tr>';
+    }
+    return;
+  }
+
+  VD.rows = res.rows || [];
+  VD.folder = res.folder || '';
+  renderVideos();
+}
+
+function renderVideos() {
+  const onlyDone = $('#vdOnlyDone').checked;
+  const rows = onlyDone ? VD.rows.filter(r => r.video) : VD.rows;
+  VD.playable = VD.rows.filter(r => r.video);
+
+  const done = VD.playable.length;
+  $('#vdTotal').textContent = VD.rows.length;
+  $('#vdDone').textContent = done;
+  $('#vdNone').textContent = VD.rows.length - done;
+
+  $('#vdTable tbody').innerHTML = rows.map(r => {
+    const v = r.video;
+    const idx = v ? VD.playable.indexOf(r) : -1;
+    return `<tr class="${v ? '' : 'dimrow'}">
+      <td>${esc(r.group || '–')}</td>
+      <td>${esc(r.order || '–')}</td>
+      <td>${esc(r.sid)}</td>
+      <td>${esc(r.name)}</td>
+      <td>${esc(r.field || '–')}</td>
+      <td>${v ? esc(String(v.seconds)) + '초' : '–'}</td>
+      <td>${v ? esc(String(v.sizeMB)) + 'MB' : '–'}</td>
+      <td>${v ? esc(String(v.at).slice(5, 16)) : '<span class="err">아직</span>'}</td>
+      <td>${v ? `<button class="btn sm primary" data-play="${idx}">▶ 재생</button>`
+              : '<span class="dim">–</span>'}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="9" class="dim">보여 줄 학생이 없습니다.</td></tr>';
+
+  $$('#vdTable [data-play]').forEach(b =>
+    b.addEventListener('click', () => playVideoAt(+b.dataset.play)));
+}
+
+/** 목록의 i 번째 영상을 재생창에 띄웁니다. */
+function playVideoAt(i) {
+  if (i < 0 || i >= VD.playable.length) return;
+  VD.at = i;
+  const r = VD.playable[i];
+  const v = r.video;
+
+  $('#pmTitle').textContent = `${r.name} (${r.sid})`;
+  $('#pmSub').textContent =
+    [r.group ? `${r.group}모둠` : '', r.order ? `${r.order}번째` : '', r.field,
+     `${v.seconds}초`, `${i + 1} / ${VD.playable.length}`]
+      .filter(Boolean).join(' · ');
+
+  /* 드라이브의 미리보기 주소를 씁니다. 선생님 계정으로 로그인되어 있으면 바로 나옵니다. */
+  $('#pmFrame').src = `https://drive.google.com/file/d/${encodeURIComponent(v.fileId)}/preview`;
+  $('#pmOpen').href = v.url;
+
+  $('#pmPrev').disabled = (i <= 0);
+  $('#pmNext').disabled = (i >= VD.playable.length - 1);
+  $('#pmNext').textContent = (i >= VD.playable.length - 1)
+    ? '마지막 발표자입니다' : '다음 발표자 →';
+
+  $('#playModal').hidden = false;
+  document.body.style.overflow = 'hidden';
+}
+
+function closePlay() {
+  $('#pmFrame').src = 'about:blank';     // 소리가 계속 나지 않도록 비웁니다
+  $('#playModal').hidden = true;
+  document.body.style.overflow = '';
+}
+
+$('#pmClose').addEventListener('click', closePlay);
+$('#pmPrev').addEventListener('click', () => playVideoAt(VD.at - 1));
+$('#pmNext').addEventListener('click', () => playVideoAt(VD.at + 1));
+$('#playModal').addEventListener('click', e => { if (e.target.id === 'playModal') closePlay(); });
+
+document.addEventListener('keydown', e => {
+  if ($('#playModal').hidden) return;
+  if (e.key === 'Escape') closePlay();
+  if (e.key === 'ArrowRight') playVideoAt(VD.at + 1);
+  if (e.key === 'ArrowLeft')  playVideoAt(VD.at - 1);
 });

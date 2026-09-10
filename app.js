@@ -3,7 +3,7 @@
  *  버전: student v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const APP_VERSION = 'student v1.4.0 (2026-08-18) 계정자동인식';
+const APP_VERSION = 'student v1.5.0 (2026-09-10) 발표영상';
 console.log('%c' + APP_VERSION, 'background:#1DB954;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -240,6 +240,7 @@ function startApp() {
   buildSheet();
   buildPeer();
   restorePresent();
+  initVideo();
   updateProgress();
   updateNowBar();
 
@@ -256,7 +257,10 @@ function showTab(name) {
     $('#panel-' + n).hidden = (n !== name);
   });
   window.scrollTo({ top: 0, behavior: 'instant' in window ? 'instant' : 'auto' });
-  if (name === 'present') renderScript();
+  if (name === 'present') {
+    renderScript();
+    if (typeof vRenderPrompt === 'function') vRenderPrompt();
+  }
 }
 $('#btnGoSheet').addEventListener('click', () => showTab('sheet'));
 
@@ -690,7 +694,11 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) flush
 window.addEventListener('beforeunload', (e) => {
   if (S.leaving) return;              // [나가기] 로 나가는 중이면 묻지 않습니다
   flushOnLeave();
-  if (!S.submitted && countFilled(S.data) > 0) { e.preventDefault(); e.returnValue = ''; }
+  /* 영상을 보내는 중에 나가면 중간에 끊깁니다. 한 번 물어봅니다. */
+  const busy = (typeof V !== 'undefined' && V.uploading);
+  if (busy || (!S.submitted && countFilled(S.data) > 0)) {
+    e.preventDefault(); e.returnValue = '';
+  }
 });
 
 $('#btnSave').addEventListener('click', () => saveServerNow(true));
@@ -807,6 +815,9 @@ function applyLock() {
 
   /* 내보내기와 인쇄는 언제나 됩니다. 학생이 자기 글을 못 가져가면 곤란하니까요. */
   $('#btnExport').disabled = false;
+
+  /* 발표 영상도 수업 시간 안에서만 찍고 낼 수 있습니다. */
+  if (typeof vApplyLock === 'function') vApplyLock();
 }
 
 /* ===========================================================================
@@ -1123,3 +1134,411 @@ function download(name, text, mime) {
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
   toast('파일을 내려받았습니다', 'ok');
 }
+
+/* ===========================================================================
+ *  11. 1분 발표 영상 — 찍고, 보고, 내기
+ *
+ *  왜 태블릿 카메라 앱을 쓰지 않고 여기서 찍나
+ *   · 카메라 앱으로 찍으면 1분에 50~150MB 가 나옵니다. 한 학급이면 3GB 가
+ *     넘어 학교 와이파이가 먼저 무너집니다.
+ *   · 여기서 찍으면 config.js 에 적어 둔 화질로 고정되어 1분에 4MB 안팎입니다.
+ *   · 60초가 되면 저절로 멈추므로 길이를 따로 재지 않아도 됩니다.
+ *
+ *  보내는 방법
+ *   한 번에 보내지 않고 512KB 씩 나눠 보냅니다. 중간에 끊겨도 그 조각만
+ *   다시 보내면 됩니다. 조각 크기가 3의 배수라 서버에서 글자를 그대로
+ *   이어 붙이기만 하면 원래 영상이 됩니다.
+ * ========================================================================= */
+
+const V = {
+  stream: null,      // 카메라
+  rec: null,         // 녹화기
+  chunks: [],        // 녹화 중 쌓이는 조각
+  blob: null,        // 다 찍은 영상
+  mime: '',          // 저장 형식
+  seconds: 0,        // 찍은 길이
+  timer: null,
+  left: 0,
+  uploading: false,
+  sent: null,        // 이미 낸 영상 {url, at, sizeMB, seconds, retakes}
+  retakes: 0,
+  supported: true
+};
+
+/* 쓸 수 있는 형식. 앞에 있는 것부터 씁니다.
+ *
+ * 코덱까지 적은 것을 먼저 놓은 데는 까닭이 있습니다.
+ * 그냥 'video/mp4' 만 물어보면 「된다」고 답하고서는 속에 엉뚱한 코덱(VP9)을
+ * 넣는 브라우저가 있습니다. 그러면 이름은 .mp4 인데 구글 드라이브에서
+ * 재생이 안 되는 파일이 나옵니다. 코덱을 못 박아 물어보면 그런 일이 없습니다.
+ * 맨 아래 두 줄은 코덱을 따로 못 고르는 사파리(아이패드)를 위한 자리입니다. */
+const V_MIME = [
+  'video/mp4;codecs=avc1.42E01E,mp4a.40.2',   // 갤럭시탭·아이패드 — 어디서나 재생됨
+  'video/mp4;codecs=avc1.4D401E,mp4a.40.2',
+  'video/webm;codecs=h264,opus',
+  'video/webm;codecs=vp8,opus',
+  'video/webm;codecs=vp9,opus',
+  'video/mp4',
+  'video/webm'
+];
+
+const vEl = {};
+function vGrab() {
+  ['vState', 'vBox', 'vLive', 'vPlay', 'vHint', 'vClock', 'vRec', 'vPrompt',
+   'vPromptToggle', 'vPromptToggleWrap', 'vBar', 'vFill', 'vMsg',
+   'btnVCam', 'btnVRec', 'btnVStop', 'btnVAgain', 'btnVSend'
+  ].forEach(function (id) { vEl[id] = $('#' + id); });
+}
+
+/* ---------- 시작할 때 한 번 ---------- */
+async function initVideo() {
+  vGrab();
+  if (!vEl.vBox) return;
+
+  /* 이 기기가 녹화를 할 수 있는지 */
+  const secure = window.isSecureContext;
+  const hasGUM = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+  const hasMR = (typeof MediaRecorder !== 'undefined');
+  V.supported = secure && hasGUM && hasMR;
+
+  if (V.supported && MediaRecorder.isTypeSupported) {
+    for (let i = 0; i < V_MIME.length; i++) {
+      try { if (MediaRecorder.isTypeSupported(V_MIME[i])) { V.mime = V_MIME[i]; break; } }
+      catch (e) {}
+    }
+  }
+
+  if (!V.supported) {
+    vState('이 태블릿에서는 앱 안에서 찍을 수 없습니다', 'wait');
+    vMsg('선생님께 말씀해 주세요. 다른 태블릿으로 찍으면 됩니다.', 'bad');
+    vEl.btnVCam.disabled = true;
+    return;
+  }
+
+  vEl.btnVCam.addEventListener('click', vOpenCam);
+  vEl.btnVRec.addEventListener('click', vStart);
+  vEl.btnVStop.addEventListener('click', function () { vStop(true); });
+  vEl.btnVAgain.addEventListener('click', vAgain);
+  vEl.btnVSend.addEventListener('click', vSend);
+  vEl.vPromptToggle.addEventListener('change', vRenderPrompt);
+
+  /* 이미 낸 영상이 있는지 서버에 물어봅니다. */
+  try {
+    const r = await apiPost('videoMine', { idToken: Auth.idToken, sid: S.sid }, 12000);
+    if (r && r.ok && r.video) {
+      V.sent = r.video;
+      V.retakes = Number(r.video.retakes || 0);
+      vShowSent();
+    }
+  } catch (e) { /* 못 물어봐도 찍는 데는 지장이 없습니다 */ }
+
+  vApplyLock();
+}
+
+/* ---------- 화면 표시 도우미 ---------- */
+function vState(text, kind) {
+  vEl.vState.textContent = text;
+  vEl.vState.className = 'v-state ' + (kind || '');
+}
+function vMsg(text, kind) {
+  vEl.vMsg.textContent = text || '';
+  vEl.vMsg.className = 'v-msg ' + (kind || '');
+}
+function vShow(el, on) { if (el) el.hidden = !on; }
+function vProgress(p) {
+  vEl.vBar.hidden = false;
+  vEl.vFill.style.width = Math.round(Math.max(0, Math.min(1, p)) * 100) + '%';
+}
+
+/** 이미 낸 영상이 있을 때 카드 아래에 보여 줍니다. */
+function vShowSent() {
+  if (!V.sent) return;
+  vState('영상을 냈습니다', 'ok');
+  let box = $('#vDone');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'vDone'; box.className = 'v-done';
+    vEl.vMsg.parentNode.appendChild(box);
+  }
+  box.innerHTML =
+    `낸 시각 <b>${esc(String(V.sent.at || '').slice(5))}</b> · ` +
+    `${esc(String(V.sent.seconds || 0))}초 · ${esc(String(V.sent.sizeMB || 0))}MB` +
+    (V.retakes ? ` · 다시 찍기 ${V.retakes}회` : '') +
+    `<br><span class="dim">더 잘 찍고 싶으면 [카메라 켜기] 로 다시 찍어 내면 됩니다. ` +
+    `마지막에 낸 것만 남습니다.</span>`;
+}
+
+/** 9번 세 문장을 화면 아래에 띄웁니다. */
+function vRenderPrompt() {
+  const on = vEl.vPromptToggle && vEl.vPromptToggle.checked;
+  const parts = String(S.data.q9 || '').split('\n');
+  const any = parts.some(function (x) { return x && x.trim(); });
+  if (!on || !any) { vShow(vEl.vPrompt, false); return; }
+  vEl.vPrompt.innerHTML = Q9_LABEL.map(function (lb, k) {
+    const t = parts[k] && parts[k].trim();
+    return t ? `<p><b>${lb.slice(0, 1)}</b> ${esc(t)}</p>` : '';
+  }).join('');
+  vShow(vEl.vPrompt, true);
+}
+
+/* ---------- 카메라 켜기 ---------- */
+async function vOpenCam() {
+  const btn = vEl.btnVCam;
+  btn.disabled = true; btn.textContent = '카메라를 여는 중…';
+  vMsg('');
+
+  try {
+    V.stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: 'user',
+        width:  { ideal: VIDEO_WIDTH },
+        height: { ideal: VIDEO_HEIGHT },
+        frameRate: { ideal: VIDEO_FPS, max: 30 }
+      },
+      audio: { echoCancellation: true, noiseSuppression: true }
+    });
+  } catch (e) {
+    btn.disabled = false; btn.textContent = '다시 켜 보기';
+    const why =
+      e.name === 'NotAllowedError'  ? '카메라를 쓰겠다는 물음에 [허용] 을 눌러 주세요.' :
+      e.name === 'NotFoundError'    ? '앞 카메라를 찾지 못했습니다. 선생님께 말씀해 주세요.' :
+      e.name === 'NotReadableError' ? '다른 앱이 카메라를 쓰고 있습니다. 그 앱을 닫고 다시 해 보세요.' :
+                                      '카메라를 켜지 못했습니다. 선생님께 말씀해 주세요.';
+    vMsg(why, 'bad');
+    return;
+  }
+
+  vEl.vLive.srcObject = V.stream;
+  vEl.vLive.muted = true;
+  vEl.vLive.play().catch(function () {});
+
+  vShow(vEl.vLive, true);
+  vShow(vEl.vPlay, false);
+  vShow(vEl.vHint, false);
+  vShow(vEl.btnVCam, false);
+  vShow(vEl.btnVRec, true);
+  vShow(vEl.vPromptToggleWrap, true);
+
+  const at = V.stream.getAudioTracks()[0];
+  vState('준비되었습니다', '');
+  vMsg(at ? '[● 녹화 시작] 을 누르면 바로 찍습니다.'
+          : '마이크가 잡히지 않았습니다. 소리 없이 찍힐 수 있습니다.', at ? '' : 'bad');
+  vRenderPrompt();
+}
+
+function vStopCam() {
+  if (!V.stream) return;
+  V.stream.getTracks().forEach(function (t) { try { t.stop(); } catch (e) {} });
+  V.stream = null;
+}
+
+/* ---------- 녹화 ---------- */
+function vStart() {
+  if (!V.stream || V.rec) return;
+
+  V.chunks = []; V.blob = null;
+  const old = $('#vDone'); if (old) old.remove();
+  vEl.vBar.hidden = true;
+  vMsg('');
+
+  const opt = { videoBitsPerSecond: VIDEO_BPS, audioBitsPerSecond: VIDEO_AUDIO_BPS };
+  if (V.mime) opt.mimeType = V.mime;
+
+  try { V.rec = new MediaRecorder(V.stream, opt); }
+  catch (e) {
+    try { V.rec = new MediaRecorder(V.stream); }       // 옵션을 거절하면 기본값으로
+    catch (e2) {
+      vMsg('녹화를 시작하지 못했습니다. 선생님께 말씀해 주세요.', 'bad');
+      V.rec = null; return;
+    }
+  }
+  V.mime = V.rec.mimeType || V.mime || 'video/mp4';
+
+  V.rec.ondataavailable = function (e) { if (e.data && e.data.size) V.chunks.push(e.data); };
+  V.rec.onstop = vFinish;
+
+  const t0 = Date.now();
+  try { V.rec.start(1000); }
+  catch (e) { vMsg('녹화를 시작하지 못했습니다.', 'bad'); V.rec = null; return; }
+
+  vShow(vEl.btnVRec, false);
+  vShow(vEl.btnVStop, true);
+  vShow(vEl.vClock, true);
+  vShow(vEl.vRec, true);
+  vState('찍는 중입니다', 'rec');
+  vMsg('화면이 아니라 카메라를 보고 말하세요.');
+  vRenderPrompt();
+
+  V.left = VIDEO_SECONDS;
+  vEl.vClock.textContent = fmtLeft(V.left * 1000);
+  V.timer = setInterval(function () {
+    V.left = Math.max(0, VIDEO_SECONDS - Math.round((Date.now() - t0) / 1000));
+    vEl.vClock.textContent = fmtLeft(V.left * 1000);
+    vEl.vClock.classList.toggle('over', V.left <= 10);
+    if (V.left <= 0) vStop(false);
+  }, 200);
+}
+
+/** manual 이 true 면 학생이 직접 멈춘 것입니다. */
+function vStop(manual) {
+  clearInterval(V.timer); V.timer = null;
+  V.seconds = Math.max(1, VIDEO_SECONDS - V.left);
+  vShow(vEl.vClock, false);
+  vShow(vEl.vRec, false);
+  vShow(vEl.btnVStop, false);
+  if (V.rec && V.rec.state !== 'inactive') { try { V.rec.stop(); } catch (e) {} }
+  if (!manual) vMsg('60초가 되어 저절로 멈췄습니다.');
+}
+
+function vFinish() {
+  V.rec = null;
+  V.blob = new Blob(V.chunks, { type: (V.mime || 'video/mp4').split(';')[0] });
+  V.chunks = [];
+
+  vShow(vEl.vLive, false);
+  vShow(vEl.vPrompt, false);
+  vShow(vEl.vPlay, true);
+  vEl.vPlay.src = URL.createObjectURL(V.blob);
+  vEl.vPlay.muted = false;
+
+  vShow(vEl.btnVAgain, true);
+  vShow(vEl.btnVSend, true);
+
+  const mb = (V.blob.size / 1048576).toFixed(1);
+  vState('찍었습니다 · 아직 내지 않았습니다', 'wait');
+  vMsg(`${V.seconds}초 · ${mb}MB — 한 번 보고, 괜찮으면 [이 영상 내기] 를 누르세요.`);
+  vApplyLock();
+}
+
+function vAgain() {
+  if (V.uploading) return;
+  if (VIDEO_RETAKE_LIMIT && V.retakes >= VIDEO_RETAKE_LIMIT) {
+    vMsg(`다시 찍기는 ${VIDEO_RETAKE_LIMIT}번까지입니다.`, 'bad');
+    return;
+  }
+  V.blob = null; V.seconds = 0;
+  try { URL.revokeObjectURL(vEl.vPlay.src); } catch (e) {}
+  vEl.vPlay.removeAttribute('src');
+  vShow(vEl.vPlay, false);
+  vShow(vEl.vLive, true);
+  vShow(vEl.btnVAgain, false);
+  vShow(vEl.btnVSend, false);
+  vEl.vBar.hidden = true;
+  vMsg('');
+  if (V.stream) { vShow(vEl.btnVRec, true); vState('준비되었습니다', ''); vRenderPrompt(); }
+  else { vShow(vEl.btnVCam, true); vEl.btnVCam.disabled = false;
+         vEl.btnVCam.textContent = '카메라 켜기'; vState('아직 찍지 않았습니다', ''); }
+}
+
+/* ---------- 보내기 ---------- */
+
+/** 조각 하나를 base64 글자로 바꿉니다. */
+function vToB64(part) {
+  return new Promise(function (resolve, reject) {
+    const fr = new FileReader();
+    fr.onload = function () { resolve(String(fr.result).split(',')[1] || ''); };
+    fr.onerror = function () { reject(new Error('영상을 읽지 못했습니다')); };
+    fr.readAsDataURL(part);
+  });
+}
+const vSleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function vSend() {
+  if (!V.blob || V.uploading) return;
+
+  V.uploading = true;
+  vEl.btnVSend.disabled = true;
+  vEl.btnVAgain.disabled = true;
+  vState('보내는 중입니다', 'wait');
+  vMsg('보내는 동안 화면을 끄거나 나가지 마세요.');
+  vProgress(0.02);
+
+  const fail = function (text) {
+    V.uploading = false;
+    vEl.btnVSend.disabled = false;
+    vEl.btnVAgain.disabled = false;
+    vState('보내지 못했습니다', 'wait');
+    vMsg(text + ' — 찍은 영상은 그대로 있습니다. [이 영상 내기] 를 한 번 더 눌러 보세요.', 'bad');
+  };
+
+  try {
+    /* 1. 자리 잡기 */
+    const init = await apiPost('videoInit', {
+      idToken: Auth.idToken, sid: S.sid,
+      bytes: V.blob.size, seconds: V.seconds, mime: V.mime
+    }, 30000);
+    if (!init || !init.ok) { fail(errText(init)); return; }
+
+    const size = Number(init.chunkSize) || 524286;
+    const total = Math.ceil(V.blob.size / size);
+
+    /* 2. 조각 보내기 (한 조각당 세 번까지 다시 해 봅니다) */
+    for (let i = 0; i < total; i++) {
+      const part = V.blob.slice(i * size, Math.min((i + 1) * size, V.blob.size));
+      const b64 = await vToB64(part);
+
+      let ok = false, last = null;
+      for (let t = 0; t < 3 && !ok; t++) {
+        const r = await apiPost('videoChunk', {
+          idToken: Auth.idToken, sid: S.sid, upId: init.upId, seq: i, b64: b64
+        }, 90000);
+        if (r && r.ok) ok = true;
+        else { last = r; await vSleep(800 * (t + 1)); }
+      }
+      if (!ok) { fail(errText(last)); return; }
+
+      vProgress(0.02 + (i + 1) / total * 0.9);
+      vMsg(`보내는 중… ${Math.round((i + 1) / total * 100)}%`);
+    }
+
+    /* 3. 이어 붙이기 */
+    vMsg('마무리하는 중…');
+    const done = await apiPost('videoDone', {
+      idToken: Auth.idToken, sid: S.sid, upId: init.upId,
+      total: total, seconds: V.seconds, mime: V.mime
+    }, 120000);
+
+    if (!done || !done.ok) { fail(errText(done)); return; }
+
+    vProgress(1);
+    V.sent = { at: done.at, url: done.url, seconds: V.seconds,
+               sizeMB: done.sizeMB, retakes: done.retakes };
+    V.retakes = Number(done.retakes || 0);
+    V.uploading = false;
+    vEl.btnVAgain.disabled = false;
+    vShow(vEl.btnVSend, false);
+    vMsg('');
+    vShowSent();
+    toast('발표 영상을 냈습니다', 'ok', 4000);
+    setTimeout(function () { vEl.vBar.hidden = true; }, 1200);
+
+  } catch (e) {
+    fail(String(e.message || e));
+  }
+}
+
+/* ---------- 잠금 ---------- */
+/** 수업 시간이 아니면 찍지도 내지도 못하게 합니다. */
+function vApplyLock() {
+  if (!vEl.vBox || !V.supported) return;
+  const shut = !!(S.cfg && S.cfg.entry && !S.cfg.entry.open);
+
+  [vEl.btnVCam, vEl.btnVRec, vEl.btnVSend].forEach(function (b) {
+    if (b) b.disabled = shut || V.uploading;
+  });
+  if (vEl.btnVAgain) vEl.btnVAgain.disabled = V.uploading;
+
+  if (shut && V.stream) {                      // 수업이 끝나면 카메라를 끕니다
+    if (V.rec) vStop(false);
+    vStopCam();
+    vShow(vEl.vLive, false);
+    if (!V.blob) vShow(vEl.vHint, true);
+    vShow(vEl.btnVRec, false);
+    vShow(vEl.btnVCam, true);
+    vEl.btnVCam.textContent = '카메라 켜기';
+  }
+  if (shut && !V.sent && !V.blob) vState('수업 시간에만 찍을 수 있습니다', 'wait');
+}
+
+/* 탭을 닫거나 화면을 나갈 때 카메라를 끕니다. */
+window.addEventListener('pagehide', vStopCam);
