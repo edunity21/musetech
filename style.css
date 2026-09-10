@@ -937,7 +937,13 @@ body.exam .nowbar { border-top-color: #A3122A; }
   margin: 10px 0 0; color: var(--muted); font-size: .88rem;
   min-height: var(--tap); cursor: pointer;
 }
-.v-check input { width: 20px; height: 20px; accent-color: var(--accent); }
+.v-check input { width: 20px; height: 20px; flex: 0 0 20px; accent-color: var(--accent); }
+
+/* 체크칸 아래에 붙는 한 줄 설명 */
+.v-note {
+  margin: -4px 0 0 28px; color: var(--dim); font-size: .82rem; line-height: 1.5;
+}
+.v-note b { color: var(--muted); }
 
 /* 보내는 동안 차오르는 막대 */
 .v-bar {

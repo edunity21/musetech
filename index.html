@@ -189,10 +189,20 @@
           <div class="v-prompt" id="vPrompt" hidden></div>
         </div>
 
-        <label class="v-check" id="vPromptToggleWrap" hidden>
-          <input type="checkbox" id="vPromptToggle" checked>
-          찍는 동안 화면 아래에 원고(9번 세 문장) 보여 주기
-        </label>
+        <div id="vOptions" hidden>
+          <label class="v-check">
+            <input type="checkbox" id="vMirror">
+            거울처럼 좌우 뒤집어 보기
+          </label>
+          <p class="v-note" id="vMirrorNote">
+            화면만 뒤집습니다. <b>찍힌 영상은 뒤집히지 않습니다</b> —
+            남들이 보는 그대로 저장됩니다.
+          </p>
+          <label class="v-check">
+            <input type="checkbox" id="vPromptToggle" checked>
+            찍는 동안 화면 아래에 원고(9번 세 문장) 보여 주기
+          </label>
+        </div>
 
         <div class="v-bar" id="vBar" hidden><div class="fill" id="vFill"></div></div>
 

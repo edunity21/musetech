@@ -3,7 +3,7 @@
  *  버전: student v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const APP_VERSION = 'student v1.5.0 (2026-09-10) 발표영상';
+const APP_VERSION = 'student v1.6.0 (2026-09-10) 거울보기';
 console.log('%c' + APP_VERSION, 'background:#1DB954;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -1185,9 +1185,33 @@ const V_MIME = [
 const vEl = {};
 function vGrab() {
   ['vState', 'vBox', 'vLive', 'vPlay', 'vHint', 'vClock', 'vRec', 'vPrompt',
-   'vPromptToggle', 'vPromptToggleWrap', 'vBar', 'vFill', 'vMsg',
+   'vPromptToggle', 'vOptions', 'vMirror', 'vBar', 'vFill', 'vMsg',
    'btnVCam', 'btnVRec', 'btnVStop', 'btnVAgain', 'btnVSend'
   ].forEach(function (id) { vEl[id] = $('#' + id); });
+}
+
+/* ---------- 거울 보기 ----------
+   카메라가 잡은 그대로 보여 주면 「남이 보는 나」라서 어색합니다.
+   손을 오른쪽으로 들면 화면에서는 왼쪽으로 움직이니 더 그렇습니다.
+   그래서 셀카처럼 좌우를 뒤집어 보여 줍니다.
+
+   ★ 뒤집는 것은 화면뿐입니다.
+   녹화기(MediaRecorder)는 카메라에서 오는 신호를 그대로 받아 적기 때문에,
+   화면을 어떻게 꾸며 놓든 저장되는 영상은 안 뒤집힌 그대로입니다.
+   교실에서 함께 볼 때 옷의 글씨나 뒤쪽 칠판 글씨가 뒤집히지 않습니다. */
+
+const V_MIRROR_KEY = 'mj:mirror';        // 기기마다 기억합니다 (학생별이 아님)
+
+function vMirrorOn() {
+  const saved = LS.get(V_MIRROR_KEY, null);
+  return (saved === null) ? !!VIDEO_MIRROR_DEFAULT : !!saved;
+}
+
+function vApplyMirror() {
+  const on = vEl.vMirror ? vEl.vMirror.checked : vMirrorOn();
+  /* 미리보기만 뒤집습니다. 다시 보기(#vPlay)는 실제 영상이라 건드리지 않습니다. */
+  if (vEl.vLive) vEl.vLive.style.transform = on ? 'scaleX(-1)' : '';
+  LS.set(V_MIRROR_KEY, on);
 }
 
 /* ---------- 시작할 때 한 번 ---------- */
@@ -1221,6 +1245,11 @@ async function initVideo() {
   vEl.btnVAgain.addEventListener('click', vAgain);
   vEl.btnVSend.addEventListener('click', vSend);
   vEl.vPromptToggle.addEventListener('change', vRenderPrompt);
+
+  /* 거울 보기 — 지난번에 고른 대로 시작합니다. */
+  vEl.vMirror.checked = vMirrorOn();
+  vEl.vMirror.addEventListener('change', vApplyMirror);
+  vApplyMirror();
 
   /* 이미 낸 영상이 있는지 서버에 물어봅니다. */
   try {
@@ -1317,7 +1346,8 @@ async function vOpenCam() {
   vShow(vEl.vHint, false);
   vShow(vEl.btnVCam, false);
   vShow(vEl.btnVRec, true);
-  vShow(vEl.vPromptToggleWrap, true);
+  vShow(vEl.vOptions, true);
+  vApplyMirror();
 
   const at = V.stream.getAudioTracks()[0];
   vState('준비되었습니다', '');
@@ -1406,7 +1436,10 @@ function vFinish() {
 
   const mb = (V.blob.size / 1048576).toFixed(1);
   vState('찍었습니다 · 아직 내지 않았습니다', 'wait');
-  vMsg(`${V.seconds}초 · ${mb}MB — 한 번 보고, 괜찮으면 [이 영상 내기] 를 누르세요.`);
+  /* 거울로 보다가 다시 보기를 하면 좌우가 달라 보입니다. 고장이 아니라고 알려 줍니다. */
+  const mirrorNote = (vEl.vMirror && vEl.vMirror.checked)
+    ? ' 아까와 좌우가 바뀐 것처럼 보이는 게 맞습니다 — 이게 남들이 보는 모습입니다.' : '';
+  vMsg(`${V.seconds}초 · ${mb}MB — 한 번 보고, 괜찮으면 [이 영상 내기] 를 누르세요.` + mirrorNote);
   vApplyLock();
 }
 
