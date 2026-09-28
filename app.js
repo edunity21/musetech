@@ -3,7 +3,7 @@
  *  버전: student v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const APP_VERSION = 'student v1.7.0 (2026-09-10) 거울저장';
+const APP_VERSION = 'student v1.8.0 (2026-09-28) 연결안내';
 console.log('%c' + APP_VERSION, 'background:#1DB954;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -28,7 +28,10 @@ const S = {
   leaving: false,         // [나가기] 를 누른 뒤인지
   exam: false,            // 평가 모드인지 (수행평가 30분)
   autoSubmitted: false,   // 시간이 끝나 자동으로 낸 적이 있는지
-  warned5: false, warned1: false
+  warned5: false, warned1: false,
+  pollFails: 0,           // 서버 상태 확인이 몇 번 잇따라 실패했는지
+  pollErr: '',            // 마지막 실패 사유
+  pollRetry: null
 };
 
 const keyMain = () => 'mj:' + S.sid;
@@ -824,10 +827,58 @@ function applyLock() {
  *  7. 서버 상태 확인 (제출 열림/닫힘)
  * ========================================================================= */
 
+/**
+ * 서버 상태 확인이 실패했을 때.
+ *
+ * 예전에는 조용히 넘어갔습니다. 그러면 화면이 「서버 상태를 확인하는 중…」 에서
+ * 영영 멈춰 있어, 학생도 선생님도 기다리는 것인지 고장인지 알 수 없었습니다.
+ * 이제는 한 번은 조용히 다시 해 보고, 그래도 안 되면 화면에 알립니다.
+ */
+function pollFailed(why) {
+  S.pollFails++;
+  S.pollErr = why || '';
+  /* 첫 실패는 잠깐 끊긴 것일 수 있으니 5초 뒤에 한 번 더 해 봅니다. */
+  if (S.pollFails === 1) {
+    clearTimeout(S.pollRetry);
+    S.pollRetry = setTimeout(pollConfig, 5000);
+  }
+  /* 두 번째로 실패하면 까닭을 알아봅니다. (아래 설명) */
+  if (S.pollFails === 2) probeServer();
+  tickStatus();
+}
+
+/**
+ * 왜 안 되는지 한 번 더 물어봅니다.
+ *
+ * 상태 확인은 <script> 로 불러오는 방식이라 「안 됐다」는 것만 알 수 있고
+ * 까닭은 알 수 없습니다. 그래서 여기서는 보내기와 같은 방식(POST)으로 한 번
+ * 찔러 봅니다. 이쪽은 응답 번호를 읽을 수 있어서, 배포가 지워진 것인지
+ * (404 → SERVER_GONE) 그냥 인터넷이 끊긴 것인지 가려낼 수 있습니다.
+ */
+async function probeServer() {
+  try {
+    const r = await apiPost('ping', {}, 12000);
+    if (r && r.ok) {
+      S.pollErr = '서버는 살아 있는데 상태 확인만 안 됩니다';
+    } else if (r && r.error === 'NETWORK') {
+      S.pollErr = '인터넷 연결을 확인해 주세요';
+    } else {
+      S.pollErr = errText(r);
+    }
+  } catch (e) {
+    S.pollErr = '';
+  }
+  tickStatus();
+}
+
 async function pollConfig() {
   try {
     const r = await apiGet({ action: 'config', cls: S.cls });
-    if (!r || !r.ok) return;
+    if (!r || !r.ok) {
+      pollFailed(r ? errText(r) : '서버가 답을 주지 않았습니다');
+      return;
+    }
+    S.pollFails = 0; S.pollErr = '';
 
     const wasOpen = !!(S.cfg && S.cfg.entry && S.cfg.entry.open);
     const nowOpen = !!(r.entry && r.entry.open);
@@ -850,12 +901,32 @@ async function pollConfig() {
     }
     /* 수업이 방금 열렸다면 알려 줍니다. */
     if (!wasOpen && nowOpen && S.cfg) toast('수업이 열렸습니다', 'ok');
-  } catch (e) { /* 잠깐 끊겨도 조용히 넘어갑니다 */ }
+  } catch (e) {
+    pollFailed('서버에 연결하지 못했습니다');
+  }
 }
 
 function tickStatus() {
   const el = $('#statusBar');
-  if (!S.cfg) { el.className = 'statusbar wait'; el.textContent = '서버 상태를 확인하는 중…'; return; }
+
+  /* ── 서버가 잡히지 않을 때 ──────────────────────────────────────
+     두 번 잇따라 실패하면 잠자코 돌지 않고 무슨 일인지 알립니다. */
+  if (S.pollFails >= 2) {
+    el.className = 'statusbar closed';
+    /* 까닭이 「연결하지 못했습니다」 와 같은 말이면 두 번 적지 않습니다. */
+    const why = (S.pollErr && S.pollErr.indexOf('연결하지 못했') < 0)
+      ? ` <span class="dim">— ${esc(S.pollErr)}</span>` : '';
+    el.innerHTML = S.cfg
+      ? '서버와 연결이 끊겼습니다 · 쓰던 내용은 기기에 남아 있습니다 · 다시 이어 보는 중' + why
+      : '⚠ 서버에 연결하지 못했습니다 · <b>선생님께 알려 주세요</b>' + why;
+    return;
+  }
+
+  if (!S.cfg) {
+    el.className = 'statusbar wait';
+    el.textContent = S.pollFails ? '서버를 다시 불러 보는 중…' : '서버 상태를 확인하는 중…';
+    return;
+  }
 
   const c = S.cfg;
   const now = serverNow();

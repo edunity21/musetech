@@ -3,7 +3,7 @@
  *  버전: common v1.1.0 (2026-08-17)
  * ==========================================================================*/
 
-const COMMON_VERSION = 'common v1.3.0 (2026-09-10) 발표영상';
+const COMMON_VERSION = 'common v1.4.0 (2026-09-28) 연결안내';
 
 /* ---------------------------------------------------------------------------
  *  1. 짧은 도우미
@@ -143,6 +143,16 @@ async function apiPost(action, payload, timeoutMs) {
       redirect: 'follow'
     });
     const text = await res.text();
+
+    /* 배포가 지워졌거나 주소가 틀리면 구글이 404 짜리 안내 쪽을 돌려줍니다.
+       그대로 두면 「응답을 읽지 못했습니다」 로만 보여서 원인을 알 수 없습니다.
+       그래서 먼저 상태 숫자를 보고 무슨 일인지 또렷하게 알려 줍니다. */
+    if (!res.ok) {
+      return { ok: false,
+               error: (res.status === 404 || res.status === 403) ? 'SERVER_GONE' : 'SERVER_HTTP',
+               message: 'HTTP ' + res.status };
+    }
+
     try { return JSON.parse(text); }
     catch (e) { return { ok: false, error: 'BAD_RESPONSE', message: text.slice(0, 300) }; }
   } catch (e) {
@@ -280,7 +290,13 @@ const ERR_TEXT = {
   EXAM_NO_DRAFT:     '평가 중에는 따로 저장하지 않습니다. [지금 제출하기] 를 누르세요.',
 
   NETWORK:           '인터넷 연결이 불안정합니다. 쓰던 내용은 기기에 남아 있습니다.',
-  BAD_RESPONSE:      '서버 응답을 읽지 못했습니다. 선생님께 알려 주세요.'
+  BAD_RESPONSE:      '서버 응답을 읽지 못했습니다. 선생님께 알려 주세요.',
+
+  /* 서버 주소가 살아 있지 않을 때.
+     선생님이 보시면 바로 무엇을 할지 아시도록 배포 이야기를 적어 둡니다. */
+  SERVER_GONE:       '서버 주소가 연결되지 않습니다. 선생님께 알려 주세요. ' +
+                     '(Apps Script → 배포 관리 → 웹 앱 주소 확인)',
+  SERVER_HTTP:       '서버가 오류를 돌려주었습니다. 선생님께 알려 주세요.'
 };
 function errText(res) {
   if (!res) return '알 수 없는 오류입니다.';
