@@ -3,7 +3,7 @@
  *  버전: student v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const APP_VERSION = 'student v1.8.0 (2026-09-28) 연결안내';
+const APP_VERSION = 'student v1.8.1 (2026-09-28) 연결안내';
 console.log('%c' + APP_VERSION, 'background:#1DB954;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -836,14 +836,20 @@ function applyLock() {
  */
 function pollFailed(why) {
   S.pollFails++;
-  S.pollErr = why || '';
-  /* 첫 실패는 잠깐 끊긴 것일 수 있으니 5초 뒤에 한 번 더 해 봅니다. */
-  if (S.pollFails === 1) {
+  /* 까닭을 알아내기(probeServer) 전까지만 적어 둡니다.
+     알아낸 뒤에는 덮어쓰지 않습니다 — 그러지 않으면 애써 가려낸 까닭이
+     그다음 실패 한 번에 뭉개져 버립니다. */
+  if (S.pollFails < 3) S.pollErr = why || '';
+  /* 처음 두 번은 잠깐 끊긴 것일 수 있으니 조용히 다시 해 봅니다.
+     한 학급이 한꺼번에 들어오는 순간에는 응답이 늦어질 수 있어서,
+     바로 「고장」이라고 외치지 않고 5초 · 10초 뒤에 다시 물어봅니다. */
+  if (S.pollFails <= 2) {
     clearTimeout(S.pollRetry);
-    S.pollRetry = setTimeout(pollConfig, 5000);
+    S.pollRetry = setTimeout(pollConfig, S.pollFails * 5000);
   }
-  /* 두 번째로 실패하면 까닭을 알아봅니다. (아래 설명) */
-  if (S.pollFails === 2) probeServer();
+  /* 세 번째로 실패하면 그때 까닭을 알아봅니다. (아래 설명)
+     그 뒤로는 상황이 바뀌었을 수 있으니 열 번에 한 번씩만 다시 알아봅니다. */
+  if (S.pollFails === 3 || (S.pollFails > 3 && S.pollFails % 10 === 0)) probeServer();
   tickStatus();
 }
 
@@ -872,14 +878,25 @@ async function probeServer() {
 }
 
 async function pollConfig() {
+  /* ── 1단계 · 서버에 묻기만 합니다 ─────────────────────────────────
+     여기서 난 오류만 「연결 실패」로 봅니다.
+     아래 2단계(받은 값으로 화면 고치기)에서 난 오류까지 여기 섞이면,
+     서버는 멀쩡한데 「연결하지 못했습니다」가 뜨는 엉뚱한 일이 생깁니다. */
+  let r;
   try {
-    const r = await apiGet({ action: 'config', cls: S.cls });
-    if (!r || !r.ok) {
-      pollFailed(r ? errText(r) : '서버가 답을 주지 않았습니다');
-      return;
-    }
-    S.pollFails = 0; S.pollErr = '';
+    r = await apiGet({ action: 'config', cls: S.cls }, 20000);
+  } catch (e) {
+    pollFailed('서버에 연결하지 못했습니다');
+    return;
+  }
+  if (!r || !r.ok) {
+    pollFailed(r ? errText(r) : '서버가 답을 주지 않았습니다');
+    return;
+  }
 
+  /* ── 2단계 · 받은 값으로 화면을 고칩니다 ───────────────────────── */
+  S.pollFails = 0; S.pollErr = '';
+  try {
     const wasOpen = !!(S.cfg && S.cfg.entry && S.cfg.entry.open);
     const nowOpen = !!(r.entry && r.entry.open);
 
@@ -902,7 +919,8 @@ async function pollConfig() {
     /* 수업이 방금 열렸다면 알려 줍니다. */
     if (!wasOpen && nowOpen && S.cfg) toast('수업이 열렸습니다', 'ok');
   } catch (e) {
-    pollFailed('서버에 연결하지 못했습니다');
+    /* 화면을 고치다 난 탈입니다. 서버 탓이 아니므로 띠를 건드리지 않습니다. */
+    console.warn('상태 반영 중 오류:', e);
   }
 }
 
@@ -911,7 +929,7 @@ function tickStatus() {
 
   /* ── 서버가 잡히지 않을 때 ──────────────────────────────────────
      두 번 잇따라 실패하면 잠자코 돌지 않고 무슨 일인지 알립니다. */
-  if (S.pollFails >= 2) {
+  if (S.pollFails >= 3) {
     el.className = 'statusbar closed';
     /* 까닭이 「연결하지 못했습니다」 와 같은 말이면 두 번 적지 않습니다. */
     const why = (S.pollErr && S.pollErr.indexOf('연결하지 못했') < 0)
