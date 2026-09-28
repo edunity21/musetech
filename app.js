@@ -3,7 +3,7 @@
  *  버전: student v1.0.0 (2026-08-17)
  * ==========================================================================*/
 
-const APP_VERSION = 'student v1.8.1 (2026-09-28) 연결안내';
+const APP_VERSION = 'student v1.9.0 (2026-09-28) 상태확인POST';
 console.log('%c' + APP_VERSION, 'background:#1DB954;color:#000;padding:2px 8px;border-radius:4px');
 console.log('서버 주소:', SERVER_URL);
 
@@ -140,7 +140,7 @@ $('#inSid').addEventListener('input', () => {
   el.innerHTML = '<span class="dim">' + esc(classOf(sid)) + ' 반 상태를 확인하는 중…</span>';
   tGateCheck = setTimeout(async () => {
     try {
-      const r = await apiGet({ action: 'config', cls: classOf(sid) });
+      const r = await fetchConfig(classOf(sid));
       if (!r || !r.ok || !r.entry) { el.textContent = ''; return; }
       if (r.entry.open) {
         let s = `<span style="color:var(--accent);font-weight:700">${esc(classOf(sid))} · 지금 들어올 수 있습니다</span>`;
@@ -877,6 +877,32 @@ async function probeServer() {
   tickStatus();
 }
 
+/**
+ * 학급 상태를 물어봅니다.
+ *
+ * 왜 두 가지 길이 있나 —
+ * 예전에는 상태 확인을 <script> 로 불러오는 방식(JSONP)만 썼습니다. 이 방식은
+ * 구글이 한 번 script.googleusercontent.com 으로 넘겨 주는데, 학교 유해차단
+ * 필터가 그 주소를 막아 두는 일이 있습니다. 그러면 로그인·저장(POST)은 되는데
+ * 상태 확인만 안 되는, 알아채기 어려운 고장이 납니다.
+ *
+ * 그래서 이제는 저장과 같은 길(POST)로 먼저 물어봅니다. 서버가 아직 예전
+ * 것이라 이 길을 모르면(UNKNOWN_ACTION) 예전 방식으로 한 번 더 물어봅니다.
+ * 덕분에 서버를 안 고치셔도 예전처럼 돌아갑니다.
+ */
+let _cfgWay = 'post';          // 'post' 로 시작해, 안 통하면 'get' 으로 굳힙니다
+
+async function fetchConfig(cls) {
+  if (_cfgWay === 'post') {
+    const r = await apiPost('config', { cls: cls }, 20000);
+    if (r && r.ok) return r;
+    /* 서버가 이 길을 모릅니다. 예전 방식으로 갈아타고 다시는 묻지 않습니다. */
+    if (r && r.error === 'UNKNOWN_ACTION') _cfgWay = 'get';
+    else return r;             // 그 밖의 오류는 그대로 알립니다
+  }
+  return await apiGet({ action: 'config', cls: cls }, 20000);
+}
+
 async function pollConfig() {
   /* ── 1단계 · 서버에 묻기만 합니다 ─────────────────────────────────
      여기서 난 오류만 「연결 실패」로 봅니다.
@@ -884,7 +910,7 @@ async function pollConfig() {
      서버는 멀쩡한데 「연결하지 못했습니다」가 뜨는 엉뚱한 일이 생깁니다. */
   let r;
   try {
-    r = await apiGet({ action: 'config', cls: S.cls }, 20000);
+    r = await fetchConfig(S.cls);
   } catch (e) {
     pollFailed('서버에 연결하지 못했습니다');
     return;
